@@ -11,9 +11,8 @@ initializeSocket(server)
 async function start() {
   const dbConnected = await testConnection()
   if (!dbConnected) {
-    console.error('FATAL: Cannot connect to database. Server shutting down.')
-    process.exit(1)
-  }
+  console.error('WARNING: DB not connected, continuing server...')
+}
 
   server.listen(config.port, () => {
     console.log(`Sajilo server running on port ${config.port}`)
