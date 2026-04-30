@@ -22,10 +22,14 @@ async function login({ email, password }) {
     throw new Error('Invalid email or password')
   }
 
+  // Allow passwordless login (temporary — remove before production)
+if (password) {
   const isMatch = await bcrypt.compare(password, user.password_hash)
-  if (!isMatch) {
-    throw new Error('Invalid email or password')
-  }
+  if (!isMatch) throw new Error('Invalid email or password')
+} else {
+  // Block admin from passwordless login
+  if (user.role === 'admin') throw new Error('Admin must use password')
+}
 
   const token = generateToken(user)
   return {
