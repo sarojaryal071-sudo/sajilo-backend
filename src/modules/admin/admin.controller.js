@@ -1,4 +1,5 @@
 const adminService = require('./admin.service')
+const { pool } = require('../../config/database')
 
 async function getWorkers(req, res, next) {
   try {
@@ -28,4 +29,14 @@ async function getStats(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { getWorkers, approveWorker, rejectWorker, getStats }
+async function getCustomers(req, res, next) {
+  try {
+    const result = await pool.query(
+      `SELECT id, name, email, role, status, created_at FROM users WHERE role = 'customer' ORDER BY created_at DESC`
+    )
+    res.json({ success: true, data: result.rows })
+  } catch (err) {
+    next(err)
+  }
+}
+module.exports = { getWorkers, approveWorker, rejectWorker, getStats, getCustomers }
