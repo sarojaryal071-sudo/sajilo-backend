@@ -8,5 +8,6 @@ router.get('/workers', authGuard, roleGuard('admin'), adminController.getWorkers
 router.put('/workers/:id/approve', authGuard, roleGuard('admin'), adminController.approveWorker)
 router.put('/workers/:id/reject', authGuard, roleGuard('admin'), adminController.rejectWorker)
 router.get('/stats', authGuard, roleGuard('admin'), adminController.getStats)
+router.get('/customers', authGuard, roleGuard('admin'), adminController.getCustomers)
 
 module.exports = router
