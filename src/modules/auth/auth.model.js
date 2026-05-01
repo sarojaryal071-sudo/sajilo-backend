@@ -1,7 +1,6 @@
 const { pool } = require('../../config/database')
 
 async function createUserTable() {
-  // Create users table first
   const query = `
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
@@ -18,7 +17,6 @@ async function createUserTable() {
   `
   await pool.query(query)
 
-  // Add worker-specific columns
   const alterations = [
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT false`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) DEFAULT 'pending'`,
@@ -32,7 +30,7 @@ async function createUserTable() {
   for (const sql of alterations) {
     await pool.query(sql)
   }
-  // Create notifications table
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS notifications (
       id SERIAL PRIMARY KEY,
@@ -47,7 +45,6 @@ async function createUserTable() {
     )
   `)
   
-  // Create worker availability table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS worker_availability (
       id SERIAL PRIMARY KEY,
@@ -71,12 +68,12 @@ async function findById(id) {
   return result.rows[0] || null
 }
 
-async function createUser({ email, passwordHash, role, name }) {
+async function createUser({ email, passwordHash, role, name, status = 'active' }) {
   const result = await pool.query(
-    `INSERT INTO users (email, password_hash, role, name)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id, email, role, name, created_at`,
-    [email, passwordHash, role, name]
+    `INSERT INTO users (email, password_hash, role, name, status)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, email, role, name, status, created_at`,
+    [email, passwordHash, role, name, status]
   )
   return result.rows[0]
 }

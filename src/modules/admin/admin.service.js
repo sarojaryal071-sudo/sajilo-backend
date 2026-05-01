@@ -2,7 +2,7 @@ const { pool } = require('../../config/database')
 
 async function getAllWorkers() {
   const result = await pool.query(
-    `SELECT id, email, role, name, phone, status, created_at 
+    `SELECT id, email, role, name, phone, status, skills, is_online, completed_jobs, created_at 
      FROM users WHERE role = 'worker' ORDER BY created_at DESC`
   )
   return result.rows
@@ -19,7 +19,7 @@ async function approveWorker(id) {
 
 async function rejectWorker(id) {
   const result = await pool.query(
-    `UPDATE users SET status = 'inactive', updated_at = NOW() WHERE id = $1 AND role = 'worker' RETURNING id, email, name, status`,
+    `UPDATE users SET status = 'rejected', updated_at = NOW() WHERE id = $1 AND role = 'worker' RETURNING id, email, name, status`,
     [id]
   )
   if (!result.rows[0]) throw new Error('Worker not found')

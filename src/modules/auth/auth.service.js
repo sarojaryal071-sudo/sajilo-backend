@@ -10,7 +10,8 @@ async function register({ email, password, role, name }) {
   }
 
   const passwordHash = await bcrypt.hash(password, 10)
-  const user = await authModel.createUser({ email, passwordHash, role, name })
+  const status = role === 'worker' ? 'pending' : 'active'
+  const user = await authModel.createUser({ email, passwordHash, role, name, status })
 
   const token = generateToken(user)
   return { user, token }
@@ -22,14 +23,12 @@ async function login({ email, password }) {
     throw new Error('Invalid email or password')
   }
 
-  // Allow passwordless login (temporary — remove before production)
-if (password) {
-  const isMatch = await bcrypt.compare(password, user.password_hash)
-  if (!isMatch) throw new Error('Invalid email or password')
-} else {
-  // Block admin from passwordless login
-  if (user.role === 'admin') throw new Error('Admin must use password')
-}
+  if (password) {
+    const isMatch = await bcrypt.compare(password, user.password_hash)
+    if (!isMatch) throw new Error('Invalid email or password')
+  } else {
+    if (user.role === 'admin') throw new Error('Admin must use password')
+  }
 
   const token = generateToken(user)
   return {
@@ -38,6 +37,7 @@ if (password) {
       email: user.email,
       role: user.role,
       name: user.name,
+      status: user.status,
     },
     token,
   }
