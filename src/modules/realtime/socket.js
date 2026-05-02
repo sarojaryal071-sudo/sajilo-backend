@@ -56,24 +56,38 @@ function initializeSocket(server) {
         io.to(`user:${receiverId}`).emit('new_message', messageWithSender)
         socket.emit('message_sent', messageWithSender)
 
-        // Notify sender that a new conversation was created
-        socket.emit('conversation_created', {
-          id: message.conversation_id,
-          last_message: text,
-          last_message_at: new Date().toISOString(),
-          other_name: receiver.name,
-          other_role: receiver.role,
-          unread: 0
-        })
+        if (message.conversation_id) {
+          socket.emit('conversation_updated', {
+            id: message.conversation_id,
+            last_message: text,
+            last_message_at: new Date().toISOString(),
+            other_name: receiver.name,
+            other_role: receiver.role,
+            unread: 0
+          })
+        }
 
         const notifService = require('../notifications/notification.service')
         notifService.sendToUser(receiverId, {
-          title: 'New message',
-          message: `${sender.name}: ${text.slice(0, 50)}`,
-          priority: 'normal',
-        })
+  title: 'New message',
+  message: `${sender.name}: ${text.slice(0, 50)}`,
+  priority: 'normal',
+  type: 'chat',  // ← Add this
+})
       } catch (err) {
         socket.emit('message_error', { error: err.message })
+      }
+    })
+
+    // Marks notifications as read when user acknowledges them
+    socket.on('notification_read', async (data) => {
+      try {
+        const { notificationId } = data
+        const notifService = require('../notifications/notification.service')
+        await notifService.markAsRead(notificationId)
+        socket.emit('notification_read_update', { notificationId })
+      } catch (err) {
+        console.error('[NOTIF_READ] Error:', err.message)
       }
     })
 

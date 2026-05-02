@@ -23,12 +23,10 @@ async function login({ email, password }) {
     throw new Error('Invalid email or password')
   }
 
-  if (password) {
-    const isMatch = await bcrypt.compare(password, user.password_hash)
-    if (!isMatch) throw new Error('Invalid email or password')
-  } else {
-    if (user.role === 'admin') throw new Error('Admin must use password')
-  }
+  if (!password) throw new Error('Password is required')
+  
+  const isMatch = await bcrypt.compare(password, user.password_hash)
+  if (!isMatch) throw new Error('Invalid email or password')
 
   const token = generateToken(user)
   return {

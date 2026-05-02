@@ -62,8 +62,8 @@ async function sendNotification(payload, adminId) {
   }
 }
 
-// Sends a direct notification to a single user — used by chat, status updates, and booking events
-async function sendToUser(userId, { title, message, priority = 'normal' }) {
+// Sends a direct notification to a single user via socket
+async function sendToUser(userId, { title, message, priority = 'normal', type = 'system' }) {
   const notification = await notificationModel.create({
     title,
     message,
@@ -77,15 +77,30 @@ async function sendToUser(userId, { title, message, priority = 'normal' }) {
   const io = getIO()
   if (io) {
     io.to(`user:${userId}`).emit('notification_new', {
-      id: notification.id,
-      title,
-      message,
-      priority,
-      type: 'direct',
-    })
+  id: notification.id,
+  title,
+  message,
+  priority,
+  type: type,
+})
   }
 
   return notification
 }
 
-module.exports = { sendNotification, sendToUser }
+// Gets notifications for a specific user — for notification center UI
+async function getUserNotifications(userId, limit = 20) {
+  return notificationModel.getByUser(userId, limit)
+}
+
+// Returns unread notification count for badge display
+async function getUnreadCount(userId) {
+  return notificationModel.getUnreadCount(userId)
+}
+
+// Marks a single notification as read
+async function markAsRead(notificationId) {
+  return notificationModel.markAsRead(notificationId)
+}
+
+module.exports = { sendNotification, sendToUser, getUserNotifications, getUnreadCount, markAsRead }
