@@ -4,9 +4,11 @@ const cors = require('cors')
 const authRoutes = require('./modules/auth/auth.routes')
 const userRoutes = require('./modules/users/users.routes')
 const bookingRoutes = require('./modules/bookings/bookings.routes')
+const chatRoutes = require('./modules/chat/chat.routes')
 const errorHandler = require('./middleware/errorHandler')
 const authModel = require('./modules/auth/auth.model')
 const bookingsModel = require('./modules/bookings/bookings.model')
+const chatModel = require('./modules/chat/chat.model')
 
 const app = express()
 
@@ -19,8 +21,10 @@ app.use(express.json())
 async function initDB() {
   await authModel.createUserTable()
   console.log('Users table ready')
-  await bookingsModel.createBookingsTable()
-  console.log('Bookings table ready')
+  // await bookingsModel.createBookingsTable()
+  // console.log('Bookings table ready')
+  await chatModel.createChatTables()
+  console.log('Chat tables ready')
 }
 
 initDB()
@@ -34,13 +38,16 @@ initDB()
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
+
 const adminRoutes = require('./modules/admin/admin.routes')
+const notificationRoutes = require('./modules/notifications/notification.routes')
+
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/bookings', bookingRoutes)
 app.use('/api/admin', adminRoutes)
-const notificationRoutes = require('./modules/notifications/notification.routes')
 app.use('/api/notifications', notificationRoutes)
+app.use('/api/chat', chatRoutes)
 
 app.use(errorHandler)
 

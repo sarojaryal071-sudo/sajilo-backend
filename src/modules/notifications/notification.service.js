@@ -1,6 +1,7 @@
 const notificationModel = require('./notification.model')
 const { pool } = require('../../config/database')
 
+// Resolves which worker IDs should receive a notification based on target type
 async function resolveRecipients(targetType, targetCategory) {
   if (targetType === 'all') {
     const result = await pool.query(
@@ -27,10 +28,10 @@ async function resolveRecipients(targetType, targetCategory) {
   return []
 }
 
+// Sends a notification to workers based on admin-defined target criteria
 async function sendNotification(payload, adminId) {
   const { title, message, priority, target } = payload
 
-  // Save to database
   const notification = await notificationModel.create({
     title,
     message,
@@ -40,10 +41,8 @@ async function sendNotification(payload, adminId) {
     createdBy: adminId,
   })
 
-  // Resolve recipients
   const workerIds = await resolveRecipients(target.type, target.category)
 
-  // Emit via socket
   const { getIO } = require('../realtime/socket')
   const io = getIO()
   if (io) {
@@ -63,4 +62,30 @@ async function sendNotification(payload, adminId) {
   }
 }
 
-module.exports = { sendNotification }
+// Sends a direct notification to a single user — used by chat, status updates, and booking events
+async function sendToUser(userId, { title, message, priority = 'normal' }) {
+  const notification = await notificationModel.create({
+    title,
+    message,
+    priority,
+    targetType: 'user',
+    targetCategory: null,
+    createdBy: null,
+  })
+
+  const { getIO } = require('../realtime/socket')
+  const io = getIO()
+  if (io) {
+    io.to(`user:${userId}`).emit('notification_new', {
+      id: notification.id,
+      title,
+      message,
+      priority,
+      type: 'direct',
+    })
+  }
+
+  return notification
+}
+
+module.exports = { sendNotification, sendToUser }
