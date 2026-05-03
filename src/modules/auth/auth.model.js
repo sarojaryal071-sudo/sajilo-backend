@@ -10,6 +10,7 @@ async function createUserTable() {
       name VARCHAR(255) NOT NULL,
       phone VARCHAR(15),
       photo_url TEXT,
+      client_id VARCHAR(20),
       status VARCHAR(20) DEFAULT 'active',
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
@@ -25,6 +26,7 @@ async function createUserTable() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS completed_jobs INTEGER DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS hourly_rate INTEGER DEFAULT 500`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT DEFAULT ''`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS client_id VARCHAR(20)`,
   ]
 
   for (const sql of alterations) {
@@ -64,7 +66,7 @@ async function findByEmail(email) {
 }
 
 async function findById(id) {
-  const result = await pool.query('SELECT id, email, role, name, phone, photo_url, status, created_at FROM users WHERE id = $1', [id])
+  const result = await pool.query('SELECT id, email, role, name, phone, photo_url, client_id, status, created_at FROM users WHERE id = $1', [id])
   return result.rows[0] || null
 }
 
@@ -78,4 +80,9 @@ async function createUser({ email, passwordHash, role, name, status = 'active' }
   return result.rows[0]
 }
 
-module.exports = { createUserTable, findByEmail, findById, createUser }
+// Updates client_id for a user after registration
+async function updateClientId(userId, clientId) {
+  await pool.query('UPDATE users SET client_id = $1 WHERE id = $2', [clientId, userId])
+}
+
+module.exports = { createUserTable, findByEmail, findById, createUser, updateClientId }

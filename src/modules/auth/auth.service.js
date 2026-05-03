@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const authModel = require('./auth.model')
 const config = require('../../config/environment')
+const { generateClientId } = require('../../utils/clientIdGenerator')
 
 async function register({ email, password, role, name }) {
   const existing = await authModel.findByEmail(email)
@@ -13,8 +14,14 @@ async function register({ email, password, role, name }) {
   const status = role === 'worker' ? 'pending' : 'active'
   const user = await authModel.createUser({ email, passwordHash, role, name, status })
 
-  const token = generateToken(user)
-  return { user, token }
+// Generate and save client ID
+const profession = role === 'worker' ? name : null // Worker gets profession from their name or future field
+const clientId = await generateClientId(role, status, profession)
+await authModel.updateClientId(user.id, clientId)
+user.client_id = clientId
+
+const token = generateToken(user)
+return { user, token }
 }
 
 async function login({ email, password }) {
@@ -31,12 +38,13 @@ async function login({ email, password }) {
   const token = generateToken(user)
   return {
     user: {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      name: user.name,
-      status: user.status,
-    },
+  id: user.id,
+  email: user.email,
+  role: user.role,
+  name: user.name,
+  status: user.status,
+  client_id: user.client_id,
+},
     token,
   }
 }
