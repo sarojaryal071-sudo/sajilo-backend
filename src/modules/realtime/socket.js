@@ -2,19 +2,20 @@ const jwt = require('jsonwebtoken')
 const config = require('../../config/environment')
 
 let io = null
+let chatService = null
+let authModel = null
 
 function initializeSocket(server) {
   const { Server } = require('socket.io')
-  io = new Server(server, {
-    cors: { origin: '*' },
-  })
+  io = new Server(server, { cors: { origin: '*' } })
+
+  // Load dependencies
+  chatService = require('../chat/chat.service')
+  authModel = require('../auth/auth.model')
 
   io.use((socket, next) => {
     const token = socket.handshake.auth.token
-    if (!token) {
-      return next(new Error('Authentication required'))
-    }
-
+    if (!token) return next(new Error('Authentication required'))
     try {
       const decoded = jwt.verify(token, config.jwt.secret)
       socket.user = decoded
@@ -25,82 +26,36 @@ function initializeSocket(server) {
   })
 
   io.on('connection', (socket) => {
-    console.log(`Socket connected: user ${socket.user.id} (${socket.user.role})`)
+    const { id, role, display_id } = socket.user
+    const prefixedId = display_id || `${role === 'customer' ? 'C' : role === 'worker' ? 'W' : 'A'}${String(id).padStart(4, '0')}`
+    console.log(`Socket connected: ${prefixedId} (${role})`)
+    socket.join(`user:${prefixedId}`)
+    socket.emit('connected', { userId: prefixedId, role })
+    if (role === 'admin') { socket.join('room:admin_all') }
+    if (role === 'worker') { socket.join('worker:active') }
 
-    socket.join(`user:${socket.user.id}`)
-    socket.emit('connected', { userId: socket.user.id, role: socket.user.role })
-
-    if (socket.user.role === 'worker') {
-      socket.join('worker:active')
-    }
-
-    // Handles real-time chat messages — validates, saves to DB, and emits to receiver
     socket.on('send_message', async (data) => {
-      console.log('[SEND_MSG]', socket.user.id, '→', data.receiverId)
+      console.log('[SEND_MSG]', prefixedId, '→', data.receiverId)
       try {
         const { receiverId, text, bookingId } = data
-        const chatService = require('../chat/chat.service')
-        const authModel = require('../auth/auth.model')
-
-        const sender = await authModel.findById(socket.user.id)
+        const sender = await authModel.findById(id)
         const receiver = await authModel.findById(receiverId)
-        console.log('[SOCKET] sending message with:', { senderId: socket.user.id, receiverId, bookingId })
-        const message = await chatService.sendMessage(socket.user.id, receiverId, text, bookingId)
-
-        const messageWithSender = {
-          ...message,
-          sender_name: sender.name,
-          sender_role: sender.role,
-        }
-
-        io.to(`user:${receiverId}`).emit('new_message', messageWithSender)
-        socket.emit('message_sent', messageWithSender)
-
-        if (message.conversation_id) {
-          socket.emit('conversation_updated', {
-            id: message.conversation_id,
-            last_message: text,
-            last_message_at: new Date().toISOString(),
-            other_name: receiver.name,
-            other_role: receiver.role,
-            unread: 0
-          })
-        }
-
-        const notifService = require('../notifications/notification.service')
-        notifService.sendToUser(receiverId, {
-  title: 'New message',
-  message: `${sender.name}: ${text.slice(0, 50)}`,
-  priority: 'normal',
-  type: 'chat',  // ← Add this
-})
+        const senderDisplayId = sender?.display_id || prefixedId
+        const receiverDisplayId = receiver?.display_id || receiverId
+        const message = await chatService.sendMessage(id, receiverId, text, bookingId)
+        const msg = { ...message, sender_name: sender?.name || 'Unknown', sender_role: sender?.role, sender_display_id: senderDisplayId }
+        if (receiver?.role === 'admin') { io.to('room:admin_all').emit('new_message', msg) }
+        else { io.to(`user:${receiverDisplayId}`).emit('new_message', msg) }
+        socket.emit('message_sent', msg)
       } catch (err) {
+        console.error('[SEND_MSG] Error:', err.message)
         socket.emit('message_error', { error: err.message })
       }
     })
 
-    // Marks notifications as read when user acknowledges them
-    socket.on('notification_read', async (data) => {
-      try {
-        const { notificationId } = data
-        const notifService = require('../notifications/notification.service')
-        await notifService.markAsRead(notificationId)
-        socket.emit('notification_read_update', { notificationId })
-      } catch (err) {
-        console.error('[NOTIF_READ] Error:', err.message)
-      }
-    })
-
-    socket.on('disconnect', () => {
-      console.log(`Socket disconnected: user ${socket.user.id}`)
-    })
+    socket.on('disconnect', () => console.log(`Socket disconnected: ${prefixedId}`))
   })
-
-  console.log('Socket.io initialized with JWT auth + chat')
 }
 
-function getIO() {
-  return io
-}
-
+function getIO() { return io }
 module.exports = { initializeSocket, getIO }

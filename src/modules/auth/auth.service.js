@@ -4,7 +4,7 @@ const authModel = require('./auth.model')
 const config = require('../../config/environment')
 const { generateClientId } = require('../../utils/clientIdGenerator')
 
-async function register({ email, password, role, name }) {
+async function register({ email, password, role, name, legalName, phone }) {
   const existing = await authModel.findByEmail(email)
   if (existing) {
     throw new Error('Email already registered')
@@ -12,13 +12,14 @@ async function register({ email, password, role, name }) {
 
   const passwordHash = await bcrypt.hash(password, 10)
   const status = role === 'worker' ? 'pending' : 'active'
-  const user = await authModel.createUser({ email, passwordHash, role, name, status })
+  const user = await authModel.createUser({ email, passwordHash, role, name, legalName, phone, status })
 
 // Generate and save client ID
 const profession = role === 'worker' ? name : null // Worker gets profession from their name or future field
 const clientId = await generateClientId(role, status, profession)
 await authModel.updateClientId(user.id, clientId)
 user.client_id = clientId
+user.display_id = user.display_id  // Already set by createUser
 
 const token = generateToken(user)
 return { user, token }
@@ -44,6 +45,7 @@ async function login({ email, password }) {
   name: user.name,
   status: user.status,
   client_id: user.client_id,
+  display_id: user.display_id, // added this
 },
     token,
   }
@@ -51,7 +53,7 @@ async function login({ email, password }) {
 
 function generateToken(user) {
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role },
+    { id: user.id, email: user.email, role: user.role, display_id: user.display_id },
     config.jwt.secret,
     { expiresIn: config.jwt.expiresIn }
   )
