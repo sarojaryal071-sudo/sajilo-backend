@@ -9,6 +9,7 @@ const errorHandler = require('./middleware/errorHandler')
 const authModel = require('./modules/auth/auth.model')
 const bookingsModel = require('./modules/bookings/bookings.model')
 const chatModel = require('./modules/chat/chat.model')
+const workerRoutes = require('./modules/workers/worker.routes')
 
 const app = express()
 
@@ -48,6 +49,7 @@ app.use('/api/bookings', bookingRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/notifications', notificationRoutes)
 app.use('/api/chat', chatRoutes)
+app.use('/api/workers', workerRoutes)
 
 app.use(errorHandler)
 

@@ -3,32 +3,30 @@ const { generateClientId } = require('../../utils/clientIdGenerator')
 
 async function getAllWorkers() {
   const result = await pool.query(
-    `SELECT id, email, role, name, phone, status, client_id, skills, is_online, completed_jobs, created_at 
+    `SELECT id, email, role, name, phone, status, client_id, display_id, skills, is_online, completed_jobs, created_at 
      FROM users WHERE role = 'worker' ORDER BY created_at DESC`
   )
   return result.rows
 }
 
 async function approveWorker(id) {
-  // Get worker info first for profession
   const worker = await pool.query(
-    `SELECT id, skills FROM users WHERE id = $1 AND role = 'worker'`, [id]
+    `SELECT id, skills, primary_skill FROM users WHERE id = $1 AND role = 'worker'`, [id]
   )
   if (!worker.rows[0]) throw new Error('Worker not found')
 
-  const profession = worker.rows[0].skills?.[0] || null
+  const professionCode = worker.rows[0].primary_skill?.substring(0, 2).toUpperCase() || 'WK'
 
-  // Generate new client ID for approved worker
-  const clientId = await generateClientId('worker', 'active', profession)
+  // Use existing display ID generator from auth model
+  const { approveWorkerDisplayId } = require('../auth/auth.model')
+  const newDisplayId = await approveWorkerDisplayId(id, professionCode)
 
-  // Update status and client ID
   const result = await pool.query(
-    `UPDATE users SET status = 'active', client_id = $2, updated_at = NOW() WHERE id = $1 AND role = 'worker' RETURNING id, email, name, status, client_id`,
-    [id, clientId]
+    `UPDATE users SET status = 'active', display_id = $2, updated_at = NOW() WHERE id = $1 AND role = 'worker' RETURNING id, email, name, status, display_id`,
+    [id, newDisplayId]
   )
   return result.rows[0]
 }
-
 async function rejectWorker(id) {
   const result = await pool.query(
     `UPDATE users SET status = 'rejected', updated_at = NOW() WHERE id = $1 AND role = 'worker' RETURNING id, email, name, status`,

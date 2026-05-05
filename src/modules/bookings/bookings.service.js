@@ -2,6 +2,32 @@ const bookingsModel = require('./bookings.model')
 const { getIO } = require('../realtime/socket')
 const { pool } = require('../../config/database')
 
+// Standardized socket emitter
+function emitBookingEvent(event, booking, extra = {}) {
+  const io = getIO()
+  if (!io) return
+
+  const payload = {
+    event,
+    bookingId: booking.id,
+    status: booking.status,
+    workerId: booking.worker_id,
+    customerId: booking.customer_id,
+    timestamp: new Date().toISOString(),
+    ...extra,
+  }
+
+  // Emit to involved users
+  io.to(`user:${booking.customer_id}`).emit(event, payload)
+  io.to(`user:${booking.worker_id}`).emit(event, payload)
+
+  // Emit to booking room (for admin/support monitoring)
+  io.to(`booking:${booking.id}`).emit(event, payload)
+
+  // Emit to admin room
+  io.to('room:admin_all').emit(event, payload)
+}
+
 async function createBooking({ customerId, workerId, serviceName, jobSize }) {
   if (!customerId || !workerId || !serviceName) {
     throw new Error('customerId, workerId, and serviceName are required')
@@ -14,11 +40,7 @@ async function createBooking({ customerId, workerId, serviceName, jobSize }) {
     jobSize: jobSize || 'medium',
   })
 
-  const io = getIO()
-  if (io) {
-    io.to(`user:${workerId}`).emit('booking.created', booking)
-  }
-
+  emitBookingEvent('booking.created', booking)
   return booking
 }
 
@@ -29,11 +51,11 @@ async function getBooking(bookingId) {
 }
 
 async function getUserBookings(userId) {
-  return bookingsModel.findByUserId(userId)
+  return bookingsModel.findByCustomerId(userId)
 }
 
 async function getWorkerBookings(workerId) {
-  return bookingsModel.findByUserId(workerId)
+  return bookingsModel.findByWorkerId(workerId)
 }
 
 async function acceptBooking(bookingId, workerId) {
@@ -44,11 +66,10 @@ async function acceptBooking(bookingId, workerId) {
   
   const updated = await bookingsModel.updateStatus(bookingId, 'accepted')
   
-  const io = getIO()
-  if (io) {
-    io.to(`user:${booking.customer_id}`).emit('booking.accepted', updated)
-  }
-  
+  emitBookingEvent('booking.accepted', updated)
+  // Notify other workers this booking is taken
+  emitBookingEvent('booking.visibility.updated', updated, { visible: false })
+
   return updated
 }
 
@@ -56,7 +77,13 @@ async function rejectBooking(bookingId, workerId) {
   const booking = await bookingsModel.findById(bookingId)
   if (!booking) throw new Error('Booking not found')
   if (booking.worker_id !== workerId) throw new Error('Not your booking')
-  return bookingsModel.updateStatus(bookingId, 'rejected')
+  
+  const updated = await bookingsModel.updateStatus(bookingId, 'rejected')
+  
+  emitBookingEvent('booking.rejected', updated)
+  emitBookingEvent('booking.visibility.updated', updated, { visible: true })
+
+  return updated
 }
 
 async function updateBookingStatus(bookingId, workerId, status) {
@@ -66,6 +93,7 @@ async function updateBookingStatus(bookingId, workerId, status) {
   
   const updated = await bookingsModel.updateStatus(bookingId, status)
 
+  // Auto-update earnings on completion
   if (status === 'completed') {
     await pool.query(
       `UPDATE users 
@@ -76,15 +104,10 @@ async function updateBookingStatus(bookingId, workerId, status) {
       [booking.price || 0, workerId]
     )
   }
-  
-  const io = getIO()
-  if (io) {
-    io.to(`user:${booking.customer_id}`).emit('booking.status.updated', updated)
-    if (status === 'completed') {
-      io.to(`user:${booking.customer_id}`).emit('booking.completed', updated)
-    }
-  }
-  
+
+  // Emit specific status event
+  emitBookingEvent(`booking.${status}`, updated)
+
   return updated
 }
 

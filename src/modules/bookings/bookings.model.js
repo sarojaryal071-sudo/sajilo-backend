@@ -85,4 +85,49 @@ async function markRead(conversationId, userId) {
   )
 }
 
-module.exports = { createChatTables, findOrCreateConversation, saveMessage, getMessages, getUserConversations, markRead }
+async function create({ customerId, workerId, serviceName, jobSize, scheduledDate, urgency, price }) {
+  const result = await pool.query(
+    `INSERT INTO bookings (customer_id, worker_id, service_name, job_size, status, schedule_date, schedule_time, price)
+     VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7)
+     RETURNING *`,
+    [customerId, workerId, serviceName, jobSize, scheduledDate, urgency || 'now', price || 0]
+  )
+  return result.rows[0]
+}
+
+async function findByWorkerId(workerId) {
+  const result = await pool.query(
+    `SELECT b.*, u.name as customer_name, u.email as customer_email
+     FROM bookings b JOIN users u ON b.customer_id = u.id
+     WHERE b.worker_id = $1
+     ORDER BY b.created_at DESC`,
+    [workerId]
+  )
+  return result.rows
+}
+
+async function findByCustomerId(customerId) {
+  const result = await pool.query(
+    `SELECT b.*, u.name as worker_name
+     FROM bookings b JOIN users u ON b.worker_id = u.id
+     WHERE b.customer_id = $1
+     ORDER BY b.created_at DESC`,
+    [customerId]
+  )
+  return result.rows
+}
+
+async function findById(bookingId) {
+  const result = await pool.query('SELECT * FROM bookings WHERE id = $1', [bookingId])
+  return result.rows[0] || null
+}
+
+async function updateStatus(bookingId, status) {
+  const result = await pool.query(
+    `UPDATE bookings SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+    [status, bookingId]
+  )
+  return result.rows[0]
+}
+
+module.exports = { createChatTables, findOrCreateConversation, saveMessage, getMessages, getUserConversations, markRead, create, findByWorkerId, findByCustomerId, findById, updateStatus }

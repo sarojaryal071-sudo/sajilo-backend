@@ -30,6 +30,11 @@ function initializeSocket(server) {
     const prefixedId = display_id || `${role === 'customer' ? 'C' : role === 'worker' ? 'W' : 'A'}${String(id).padStart(4, '0')}`
     console.log(`Socket connected: ${prefixedId} (${role})`)
     socket.join(`user:${prefixedId}`)
+        // Join booking-specific rooms
+    socket.on('join_booking', (bookingId) => {
+      socket.join(`booking:${bookingId}`)
+    })
+    
     socket.emit('connected', { userId: prefixedId, role })
     if (role === 'admin') { socket.join('room:admin_all') }
     if (role === 'worker') { socket.join('worker:active') }
