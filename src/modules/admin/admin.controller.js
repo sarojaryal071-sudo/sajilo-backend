@@ -2,13 +2,13 @@ const adminService = require('./admin.service')
 
 async function getWorkers(req, res, next) {
   try {
-    const workers = await adminService.getAllWorkers()
+    const status = req.query.status || null   // e.g., "pending" or "active,rejected"
+    const workers = await adminService.getAllWorkers(status)
     res.json({ success: true, data: workers })
   } catch (err) {
     next(err)
   }
 }
-
 async function approveWorker(req, res, next) {
   try {
     const worker = await adminService.approveWorker(req.params.id)

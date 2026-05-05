@@ -36,21 +36,28 @@ async function login({ email, password }) {
   const isMatch = await bcrypt.compare(password, user.password_hash)
   if (!isMatch) throw new Error('Invalid email or password')
 
+  // Check if worker has submitted an application
+  let application_submitted = false
+  if (user.role === 'worker') {
+    const appResult = await authModel.hasApplication(user.id)
+    application_submitted = appResult
+  }
+
   const token = generateToken(user)
   return {
     user: {
-  id: user.id,
-  email: user.email,
-  role: user.role,
-  name: user.name,
-  status: user.status,
-  client_id: user.client_id,
-  display_id: user.display_id, // added this
-},
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+      status: user.status,
+      client_id: user.client_id,
+      display_id: user.display_id,
+      application_submitted,   // ← new field
+    },
     token,
   }
 }
-
 function generateToken(user) {
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role, display_id: user.display_id },

@@ -146,20 +146,37 @@ async function generateDisplayId(role, professionCode = '') {
 // Updates display ID when worker is approved (P → W + profession code)
 async function approveWorkerDisplayId(userId, professionCode) {
   const prefix = `W${professionCode.toUpperCase()}`  // e.g., WEL, WPL
-  
+
+  // Count ALL workers (any W-prefix) for global sequential number
   const result = await pool.query(
-    `SELECT COUNT(*) FROM users WHERE display_id LIKE $1`,
-    [`${prefix}%`]
+    `SELECT COUNT(*) FROM users WHERE display_id LIKE 'W%'`
   )
   const count = parseInt(result.rows[0].count) + 1
-  const number = String(count).padStart(3, '0')
+  const number = String(count).padStart(4, '0')
   const displayId = `${prefix}${number}`
 
   await pool.query(
-    `UPDATE users SET display_id = $1, status = 'active', role = 'worker' WHERE id = $2`,
+    `UPDATE users SET display_id = $1, status = 'active' WHERE id = $2`,
     [displayId, userId]
   )
   return displayId
 }
 
-module.exports = { createUserTable, findByEmail, findById, createUser, updateClientId, generateDisplayId, approveWorkerDisplayId }
+// Checks if a worker has an application in worker_applications
+async function hasApplication(userId) {
+  const result = await pool.query(
+    `SELECT 1 FROM worker_applications WHERE user_id = $1`,
+    [userId]
+  )
+  return result.rows.length > 0
+}
+module.exports = {
+  createUserTable,
+  findByEmail,
+  findById,
+  createUser,
+  updateClientId,
+  generateDisplayId,
+  approveWorkerDisplayId,
+  hasApplication,   // ← added
+}

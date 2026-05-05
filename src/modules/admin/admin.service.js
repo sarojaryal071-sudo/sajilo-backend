@@ -1,32 +1,75 @@
 const { pool } = require('../../config/database')
 const { generateClientId } = require('../../utils/clientIdGenerator')
+const { getIO } = require('../realtime/socket')
 
-async function getAllWorkers() {
-  const result = await pool.query(
-    `SELECT id, email, role, name, phone, status, client_id, display_id, skills, is_online, completed_jobs, created_at 
-     FROM users WHERE role = 'worker' ORDER BY created_at DESC`
-  )
+async function getAllWorkers(statusFilter) {
+  let query = `
+    SELECT 
+      u.id, u.email, u.role, u.name, u.phone, u.status, 
+      u.client_id, u.display_id, u.skills, u.is_online, 
+      u.completed_jobs, u.created_at,
+      COALESCE(u.primary_skill, wa.primary_role) AS primary_skill
+    FROM users u
+    LEFT JOIN worker_applications wa ON wa.user_id = u.id
+    WHERE u.role = 'worker'
+  `
+  const params = []
+
+  if (statusFilter) {
+    query += ` AND u.status = ANY($1)`
+    params.push(statusFilter.split(','))
+  }
+
+  query += ` ORDER BY u.created_at DESC`
+
+  const result = await pool.query(query, params)
   return result.rows
 }
 
 async function approveWorker(id) {
-  const worker = await pool.query(
-    `SELECT id, skills, primary_skill FROM users WHERE id = $1 AND role = 'worker'`, [id]
+  // Fetch worker application to get the true primary role
+  const appResult = await pool.query(
+    `SELECT primary_role FROM worker_applications WHERE user_id = $1`,
+    [id]
   )
-  if (!worker.rows[0]) throw new Error('Worker not found')
+  const primaryRole = appResult.rows[0]?.primary_role || null
 
-  const professionCode = worker.rows[0].primary_skill?.substring(0, 2).toUpperCase() || 'WK'
+  const { getProfessionCode } = require('../config/workerCategories')
+  const professionCode = primaryRole ? getProfessionCode(primaryRole) : 'WK'
 
-  // Use existing display ID generator from auth model
+  // Get the worker's current display_id BEFORE update (to emit to their socket room)
+  const userBefore = await pool.query(
+    `SELECT display_id FROM users WHERE id = $1`,
+    [id]
+  )
+  const oldDisplayId = userBefore.rows[0]?.display_id
+
+  // Update user's primary_skill
+  await pool.query(`UPDATE users SET primary_skill = $1 WHERE id = $2`, [primaryRole, id])
+
+  // Generate new worker display ID
   const { approveWorkerDisplayId } = require('../auth/auth.model')
   const newDisplayId = await approveWorkerDisplayId(id, professionCode)
 
+  // Final approval update
   const result = await pool.query(
     `UPDATE users SET status = 'active', display_id = $2, updated_at = NOW() WHERE id = $1 AND role = 'worker' RETURNING id, email, name, status, display_id`,
     [id, newDisplayId]
   )
+
+  // 🔥 Emit real‑time event to the worker's pending screen
+  const io = getIO()
+  if (io && oldDisplayId) {
+    io.to(`user:${oldDisplayId}`).emit('worker:approved', {
+      status: 'active',
+      display_id: newDisplayId,
+      userId: id,
+    })
+  }
+
   return result.rows[0]
 }
+
 async function rejectWorker(id) {
   const result = await pool.query(
     `UPDATE users SET status = 'rejected', updated_at = NOW() WHERE id = $1 AND role = 'worker' RETURNING id, email, name, status`,
