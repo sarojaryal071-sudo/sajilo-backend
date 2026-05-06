@@ -37,15 +37,15 @@ async function searchWorkers({ service, location, minRating, limit = 20 }) {
       AND u.is_online = true
   `
   const params = []
-  
+
   if (service) {
     params.push(`%${service}%`)
-    query += ` AND (u.skills::text ILIKE $${params.length} OR u.primary_skill ILIKE $${params.length})`
+    query += ` AND (u.primary_skill ILIKE $${params.length} OR wa.secondary_roles::text ILIKE $${params.length})`
   }
-  
+
   query += ` ORDER BY u.completed_jobs DESC LIMIT $${params.length + 1}`
   params.push(limit)
-  
+
   const result = await pool.query(query, params)
   return result.rows
 }
