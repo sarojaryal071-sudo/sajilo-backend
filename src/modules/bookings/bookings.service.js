@@ -29,8 +29,18 @@ function emitBookingEvent(event, booking, extra = {}) {
 }
 
 async function createBooking({ customerId, workerId, serviceName, jobSize }) {
-  if (!customerId || !workerId || !serviceName) {
-    throw new Error('customerId, workerId, and serviceName are required')
+    // Verify worker exists and is online
+  const { pool } = require('../../config/database')
+  const workerResult = await pool.query(
+    `SELECT id, is_online FROM users WHERE id = $1 AND role = 'worker'`,
+    [workerId]
+  )
+  const worker = workerResult.rows[0]
+  if (!worker) {
+    throw new Error('Worker not found')
+  }
+  if (!worker.is_online) {
+    throw new Error('Worker is currently offline and cannot accept new bookings')
   }
 
   const booking = await bookingsModel.create({

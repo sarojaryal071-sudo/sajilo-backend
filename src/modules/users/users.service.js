@@ -1,4 +1,5 @@
 const usersModel = require('./users.model')
+const { getIO } = require('../realtime/socket')
 
 async function getProfile(userId) {
   const user = await usersModel.findById(userId)
@@ -25,6 +26,23 @@ async function getWorkerProfile(userId) {
 async function updateWorkerProfile(userId, fields) {
   const profile = await usersModel.updateWorkerProfile(userId, fields)
   if (!profile) throw new Error('Worker not found')
+
+  // Notify client search panels about online/offline change
+  if (fields.is_online !== undefined) {
+    const io = getIO()
+    if (io) {
+      const updatedWorker = await usersModel.getWorkerProfile(userId)
+      if (updatedWorker) {
+        io.emit('worker:statusChanged', {
+          workerId: userId,
+          client_id: updatedWorker.client_id,
+          is_online: updatedWorker.is_online,
+          name: updatedWorker.name,
+        })
+      }
+    }
+  }
+
   return profile
 }
 
@@ -39,4 +57,5 @@ async function getWorkerSchedule(userId) {
 async function saveWorkerSchedule(userId, schedule) {
   return usersModel.saveWorkerAvailability(userId, schedule)
 }
+
 module.exports = { getProfile, updateProfile, getWorkerProfile, updateWorkerProfile, getWorkerEarnings, getWorkerSchedule, saveWorkerSchedule }

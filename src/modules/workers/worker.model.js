@@ -23,19 +23,27 @@ async function findByClientId(clientId) {
   return result.rows[0] || null
 }
 
-async function searchWorkers({ service, location, minRating, available, limit = 20 }) {
-  let query = `SELECT id, client_id, name, photo_url, skills, hourly_rate, is_online, completed_jobs FROM users WHERE role = 'worker' AND status = 'active'`
+async function searchWorkers({ service, location, minRating, limit = 20 }) {
+  let query = `
+    SELECT 
+      u.id, u.client_id, u.name, u.photo_url,
+      COALESCE(u.primary_skill, wa.primary_role) AS primary_skill,
+      wa.secondary_roles,
+      u.skills, u.hourly_rate, u.is_online, u.completed_jobs
+    FROM users u
+    LEFT JOIN worker_applications wa ON wa.user_id = u.id
+    WHERE u.role = 'worker' 
+      AND u.status = 'active'
+      AND u.is_online = true
+  `
   const params = []
   
   if (service) {
     params.push(`%${service}%`)
-    query += ` AND skills::text ILIKE $${params.length}`
-  }
-  if (available) {
-    query += ` AND is_online = true`
+    query += ` AND (u.skills::text ILIKE $${params.length} OR u.primary_skill ILIKE $${params.length})`
   }
   
-  query += ` ORDER BY completed_jobs DESC LIMIT $${params.length + 1}`
+  query += ` ORDER BY u.completed_jobs DESC LIMIT $${params.length + 1}`
   params.push(limit)
   
   const result = await pool.query(query, params)

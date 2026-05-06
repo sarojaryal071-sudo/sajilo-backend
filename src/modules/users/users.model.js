@@ -25,10 +25,15 @@ async function update(id, fields) {
 
 async function getWorkerProfile(userId) {
   const result = await pool.query(
-    `SELECT id, email, role, name, phone, photo_url, status,
-            is_online, verification_status, skills, total_earnings, completed_jobs,
-            created_at
-     FROM users WHERE id = $1 AND role = 'worker'`,
+    `SELECT u.id, u.email, u.role, u.name, u.phone, u.photo_url, u.status,
+            u.client_id,
+            COALESCE(u.primary_skill, wa.primary_role) AS primary_skill,
+            wa.secondary_roles AS secondary_roles,
+            u.is_online, u.verification_status, u.skills, 
+            u.total_earnings, u.completed_jobs, u.created_at
+     FROM users u
+     LEFT JOIN worker_applications wa ON wa.user_id = u.id
+     WHERE u.id = $1 AND u.role = 'worker'`,
     [userId]
   )
   return result.rows[0] || null
