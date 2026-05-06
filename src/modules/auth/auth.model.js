@@ -29,6 +29,7 @@ async function createUserTable() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS legal_name VARCHAR(255)`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS document_url TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS primary_skill VARCHAR(100)`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS welcomed BOOLEAN DEFAULT false`,
   ]
 
   for (const sql of alterations) {
