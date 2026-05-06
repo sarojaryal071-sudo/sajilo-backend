@@ -43,6 +43,16 @@ async function submitWorkerApplication(req, res) {
     const { pool } = require('../../config/database')
     const userId = req.user.id
     
+    // ---------- DUPLICATE GUARD ----------
+    const existing = await pool.query(
+      `SELECT id FROM worker_applications WHERE user_id = $1`,
+      [userId]
+    )
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ success: false, error: 'Application already submitted' })
+    }
+    // ------------------------------------
+
     const {
       fullName, displayName, phone, email, dob,
       primaryRole, secondaryRoles, address, serviceArea,
