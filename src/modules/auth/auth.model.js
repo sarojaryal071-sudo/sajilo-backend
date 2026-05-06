@@ -10,7 +10,7 @@ async function createUserTable() {
       name VARCHAR(255) NOT NULL,
       phone VARCHAR(15),
       photo_url TEXT,
-      client_id VARCHAR(20),
+      client_id VARCHAR(20) UNIQUE,   -- the single authoritative ID
       status VARCHAR(20) DEFAULT 'active',
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
@@ -26,9 +26,7 @@ async function createUserTable() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS completed_jobs INTEGER DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS hourly_rate INTEGER DEFAULT 500`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT DEFAULT ''`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS client_id VARCHAR(20)`,
-    `ALTER TABLE users ADD COLUMN IF NOT EXISTS display_id VARCHAR(20)`,
-        `ALTER TABLE users ADD COLUMN IF NOT EXISTS legal_name VARCHAR(255)`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS legal_name VARCHAR(255)`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS document_url TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS primary_skill VARCHAR(100)`,
   ]
@@ -63,7 +61,7 @@ async function createUserTable() {
     )
   `)
 
-    // Pending worker applications — separate from users table
+  // Pending worker applications — separate from users table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS worker_applications (
       id SERIAL PRIMARY KEY,
@@ -103,38 +101,37 @@ async function findByEmail(email) {
 }
 
 async function findById(id) {
-    const result = await pool.query('SELECT id, email, role, name, legal_name, phone, photo_url, document_url, client_id, display_id, primary_skill, skills, hourly_rate, bio, status, created_at FROM users WHERE id = $1', [id])
+  const result = await pool.query(
+    'SELECT id, email, role, name, legal_name, phone, photo_url, document_url, client_id, primary_skill, skills, hourly_rate, bio, status, created_at FROM users WHERE id = $1',
+    [id]
+  )
   return result.rows[0] || null
 }
 
 async function createUser({ email, passwordHash, role, name, legalName, phone, status = 'active' }) {
-  const displayId = await generateDisplayId(role)
+  const clientId = await generateClientId(role)   // one unified ID generator
 
   const result = await pool.query(
-    `INSERT INTO users (email, password_hash, role, name, legal_name, phone, status, display_id)
+    `INSERT INTO users (email, password_hash, role, name, legal_name, phone, status, client_id)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING id, email, role, name, legal_name, phone, status, display_id, created_at`,
-    [email, passwordHash, role, name, legalName || name, phone, status, displayId]
+     RETURNING id, email, role, name, legal_name, phone, status, client_id, created_at`,
+    [email, passwordHash, role, name, legalName || name, phone, status, clientId]
   )
   return result.rows[0]
-}// Updates client_id for a user after registration
-async function updateClientId(userId, clientId) {
-  await pool.query('UPDATE users SET client_id = $1 WHERE id = $2', [clientId, userId])
 }
 
-// Generates role-prefixed display ID: C0001, P0001, WEL001, A001
-async function generateDisplayId(role, professionCode = '') {
+// Generates role-prefixed client ID: C0001, P0001, WEL001, A001
+async function generateClientId(role, professionCode = '') {
   let prefix
   switch (role) {
     case 'customer': prefix = 'C'; break
     case 'worker':   prefix = 'P'; break   // Pending until approved
     case 'admin':    prefix = 'A'; break
-    default:         prefix = 'U'  // Unknown
+    default:         prefix = 'U'
   }
 
-  // Count existing users with same prefix for sequential number
   const result = await pool.query(
-    `SELECT COUNT(*) FROM users WHERE display_id LIKE $1`,
+    `SELECT COUNT(*) FROM users WHERE client_id LIKE $1`,
     [`${prefix}%`]
   )
   const count = parseInt(result.rows[0].count) + 1
@@ -143,40 +140,41 @@ async function generateDisplayId(role, professionCode = '') {
   return `${prefix}${number}`
 }
 
-// Updates display ID when worker is approved (P → W + profession code)
-async function approveWorkerDisplayId(userId, professionCode) {
+// Updates client ID when worker is approved (P → W + profession code)
+async function approveWorkerClientId(userId, professionCode) {
   const prefix = `W${professionCode.toUpperCase()}`  // e.g., WEL, WPL
 
-  // Count ALL workers (any W-prefix) for global sequential number
   const result = await pool.query(
-    `SELECT COUNT(*) FROM users WHERE display_id LIKE 'W%'`
+    `SELECT COUNT(*) FROM users WHERE client_id LIKE 'W%'`
   )
   const count = parseInt(result.rows[0].count) + 1
   const number = String(count).padStart(4, '0')
-  const displayId = `${prefix}${number}`
+  const newClientId = `${prefix}${number}`
 
   await pool.query(
-    `UPDATE users SET display_id = $1, status = 'active' WHERE id = $2`,
-    [displayId, userId]
+    `UPDATE users SET client_id = $1, status = 'active' WHERE id = $2`,
+    [newClientId, userId]
   )
-  return displayId
+  return newClientId
 }
 
-// Checks if a worker has an application in worker_applications
-async function hasApplication(userId) {
+// Checks if a worker has submitted an application
+async function hasWorkerApplication(userId) {
   const result = await pool.query(
-    `SELECT 1 FROM worker_applications WHERE user_id = $1`,
+    `SELECT EXISTS(
+       SELECT 1 FROM worker_applications WHERE user_id = $1
+     ) AS exists`,
     [userId]
   )
-  return result.rows.length > 0
+  return result.rows[0]?.exists || false
 }
+
 module.exports = {
   createUserTable,
   findByEmail,
   findById,
   createUser,
-  updateClientId,
-  generateDisplayId,
-  approveWorkerDisplayId,
-  hasApplication,   // ← added
+  generateClientId,
+  approveWorkerClientId,
+  hasWorkerApplication,
 }

@@ -26,11 +26,12 @@ function initializeSocket(server) {
   })
 
   io.on('connection', (socket) => {
-    const { id, role, display_id } = socket.user
-    const prefixedId = display_id || `${role === 'customer' ? 'C' : role === 'worker' ? 'W' : 'A'}${String(id).padStart(4, '0')}`
+    const { id, role, client_id } = socket.user
+    const prefixedId = client_id || `U${id}`
     console.log(`Socket connected: ${prefixedId} (${role})`)
     socket.join(`user:${prefixedId}`)
-        // Join booking-specific rooms
+
+    // Join booking-specific rooms
     socket.on('join_booking', (bookingId) => {
       socket.join(`booking:${bookingId}`)
     })
@@ -45,12 +46,20 @@ function initializeSocket(server) {
         const { receiverId, text, bookingId } = data
         const sender = await authModel.findById(id)
         const receiver = await authModel.findById(receiverId)
-        const senderDisplayId = sender?.display_id || prefixedId
-        const receiverDisplayId = receiver?.display_id || receiverId
+        const senderClientId = sender?.client_id || prefixedId
+        const receiverClientId = receiver?.client_id || receiverId
         const message = await chatService.sendMessage(id, receiverId, text, bookingId)
-        const msg = { ...message, sender_name: sender?.name || 'Unknown', sender_role: sender?.role, sender_display_id: senderDisplayId }
-        if (receiver?.role === 'admin') { io.to('room:admin_all').emit('new_message', msg) }
-        else { io.to(`user:${receiverDisplayId}`).emit('new_message', msg) }
+        const msg = {
+          ...message,
+          sender_name: sender?.name || 'Unknown',
+          sender_role: sender?.role,
+          sender_client_id: senderClientId
+        }
+        if (receiver?.role === 'admin') {
+          io.to('room:admin_all').emit('new_message', msg)
+        } else {
+          io.to(`user:${receiverClientId}`).emit('new_message', msg)
+        }
         socket.emit('message_sent', msg)
       } catch (err) {
         console.error('[SEND_MSG] Error:', err.message)

@@ -1,4 +1,6 @@
 const usersService = require('./users.service')
+const authModel = require('../auth/auth.model') 
+
 
 async function getMe(req, res, next) {
   try {
@@ -52,4 +54,57 @@ async function saveSchedule(req, res, next) {
     res.json({ success: true, data: schedule })
   } catch (err) { next(err) }
 }
-module.exports = { getMe, updateMe, getWorkerMe, updateWorkerMe, getWorkerEarnings, getSchedule, saveSchedule }
+
+async function getMyApplication(req, res, next) {
+  try {
+    const userId = req.user.id
+    const user = await authModel.findById(userId)   // from auth.model
+    if (!user || user.role !== 'worker') {
+      return res.status(404).json({ success: false, error: 'Not a worker' })
+    }
+
+    // Get application data
+    const { pool } = require('../../config/database')
+    const appResult = await pool.query(
+      `SELECT * FROM worker_applications WHERE user_id = $1`,
+      [userId]
+    )
+    const application = appResult.rows[0] || null
+
+    res.json({
+      success: true,
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          name: user.name,
+          status: user.status,
+          client_id: user.client_id,
+          application_submitted: !!application,
+        },
+        application: application
+          ? {
+              fullName: application.full_name,
+              displayName: application.display_name,
+              phone: application.phone,
+              email: application.email,
+              dob: application.dob,
+              primaryRole: application.primary_role,
+              secondaryRoles: application.secondary_roles,
+              address: application.address,
+              serviceArea: application.service_area,
+              govId: application.gov_id,
+              selfieUrl: application.selfie_url,
+              availability: application.availability,
+              // … other fields you may need
+            }
+          : null,
+      },
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+module.exports = { getMe, updateMe, getWorkerMe, updateWorkerMe, getWorkerEarnings, getSchedule, saveSchedule, getMyApplication, }

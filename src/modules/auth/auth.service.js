@@ -2,7 +2,6 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const authModel = require('./auth.model')
 const config = require('../../config/environment')
-const { generateClientId } = require('../../utils/clientIdGenerator')
 
 async function register({ email, password, role, name, legalName, phone }) {
   const existing = await authModel.findByEmail(email)
@@ -14,15 +13,9 @@ async function register({ email, password, role, name, legalName, phone }) {
   const status = role === 'worker' ? 'pending' : 'active'
   const user = await authModel.createUser({ email, passwordHash, role, name, legalName, phone, status })
 
-// Generate and save client ID
-const profession = role === 'worker' ? name : null // Worker gets profession from their name or future field
-const clientId = await generateClientId(role, status, profession)
-await authModel.updateClientId(user.id, clientId)
-user.client_id = clientId
-user.display_id = user.display_id  // Already set by createUser
-
-const token = generateToken(user)
-return { user, token }
+  // client_id is already set by createUser – nothing extra needed
+  const token = generateToken(user)
+  return { user, token }
 }
 
 async function login({ email, password }) {
@@ -36,12 +29,11 @@ async function login({ email, password }) {
   const isMatch = await bcrypt.compare(password, user.password_hash)
   if (!isMatch) throw new Error('Invalid email or password')
 
-  // Check if worker has submitted an application
-  let application_submitted = false
-  if (user.role === 'worker') {
-    const appResult = await authModel.hasApplication(user.id)
-    application_submitted = appResult
-  }
+  // Backend computes lifecycle truth – never from frontend cache
+  const application_submitted =
+    user.role === 'worker'
+      ? await authModel.hasWorkerApplication(user.id)
+      : false
 
   const token = generateToken(user)
   return {
@@ -52,22 +44,28 @@ async function login({ email, password }) {
       name: user.name,
       status: user.status,
       client_id: user.client_id,
-      display_id: user.display_id,
-      application_submitted,   // ← new field
+      application_submitted,
     },
     token,
   }
 }
+
 function generateToken(user) {
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role, display_id: user.display_id },
+    { id: user.id, email: user.email, role: user.role, client_id: user.client_id },
     config.jwt.secret,
     { expiresIn: config.jwt.expiresIn }
   )
 }
 
-function getProfile(userId) {
-  return authModel.findById(userId)
+async function getProfile(userId) {
+  const user = await authModel.findById(userId)
+  if (!user) return null
+
+  if (user.role === 'worker') {
+    user.application_submitted = await authModel.hasWorkerApplication(userId)
+  }
+  return user
 }
 
 module.exports = { register, login, getProfile }

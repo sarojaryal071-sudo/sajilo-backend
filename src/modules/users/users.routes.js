@@ -11,5 +11,6 @@ router.get('/me', authGuard, usersController.getMe)
 router.put('/me', authGuard, usersController.updateMe)
 router.get('/worker/schedule', authGuard, roleGuard('worker'), usersController.getSchedule)
 router.put('/worker/schedule', authGuard, roleGuard('worker'), usersController.saveSchedule)
+router.get('/worker/application', authGuard, usersController.getMyApplication)
 
 module.exports = router

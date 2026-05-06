@@ -1,12 +1,13 @@
 const { pool } = require('../../config/database')
-const { generateClientId } = require('../../utils/clientIdGenerator')
-const { getIO } = require('../realtime/socket')
+
+console.log('LOADED ADMIN SERVICE:', __filename)
+console.log('WORKER CATEGORY PATH:', require.resolve('../../config/workerCategories'))
 
 async function getAllWorkers(statusFilter) {
   let query = `
     SELECT 
       u.id, u.email, u.role, u.name, u.phone, u.status, 
-      u.client_id, u.display_id, u.skills, u.is_online, 
+      u.client_id, u.skills, u.is_online, 
       u.completed_jobs, u.created_at,
       COALESCE(u.primary_skill, wa.primary_role) AS primary_skill
     FROM users u
@@ -27,42 +28,42 @@ async function getAllWorkers(statusFilter) {
 }
 
 async function approveWorker(id) {
-  // Fetch worker application to get the true primary role
   const appResult = await pool.query(
     `SELECT primary_role FROM worker_applications WHERE user_id = $1`,
     [id]
   )
   const primaryRole = appResult.rows[0]?.primary_role || null
 
-  const { getProfessionCode } = require('../config/workerCategories')
+  const { getProfessionCode } = require('../../config/workerCategories')
   const professionCode = primaryRole ? getProfessionCode(primaryRole) : 'WK'
 
-  // Get the worker's current display_id BEFORE update (to emit to their socket room)
+  // Get worker's current client_id BEFORE update for socket notification
   const userBefore = await pool.query(
-    `SELECT display_id FROM users WHERE id = $1`,
+    `SELECT client_id FROM users WHERE id = $1`,
     [id]
   )
-  const oldDisplayId = userBefore.rows[0]?.display_id
+  const oldClientId = userBefore.rows[0]?.client_id
 
-  // Update user's primary_skill
+  // Update primary_skill
   await pool.query(`UPDATE users SET primary_skill = $1 WHERE id = $2`, [primaryRole, id])
 
-  // Generate new worker display ID
-  const { approveWorkerDisplayId } = require('../auth/auth.model')
-  const newDisplayId = await approveWorkerDisplayId(id, professionCode)
+  // Generate new worker client ID
+  const { approveWorkerClientId } = require('../auth/auth.model')
+  const newClientId = await approveWorkerClientId(id, professionCode)
 
   // Final approval update
   const result = await pool.query(
-    `UPDATE users SET status = 'active', display_id = $2, updated_at = NOW() WHERE id = $1 AND role = 'worker' RETURNING id, email, name, status, display_id`,
-    [id, newDisplayId]
+    `UPDATE users SET status = 'active', client_id = $2, updated_at = NOW() WHERE id = $1 AND role = 'worker' RETURNING id, email, name, status, client_id`,
+    [id, newClientId]
   )
 
-  // 🔥 Emit real‑time event to the worker's pending screen
+  // Emit real‑time event to the worker's pending screen
+  const { getIO } = require('../realtime/socket')
   const io = getIO()
-  if (io && oldDisplayId) {
-    io.to(`user:${oldDisplayId}`).emit('worker:approved', {
+  if (io && oldClientId) {
+    io.to(`user:${oldClientId}`).emit('worker:approved', {
       status: 'active',
-      display_id: newDisplayId,
+      client_id: newClientId,
       userId: id,
     })
   }
