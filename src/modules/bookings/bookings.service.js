@@ -113,10 +113,21 @@ async function updateBookingStatus(bookingId, workerId, status) {
   const booking = await bookingsModel.findById(bookingId)
   if (!booking) throw new Error('Booking not found')
   if (booking.worker_id !== workerId) throw new Error('Not your booking')
+
+  // ── Start‑Travel guards (only for 'onway') ──
+   // ── Start‑Travel guards (only for 'onway') ──
+  if (status === 'onway') {
+    // Single active job: worker cannot have another active job
+    const activeJobs = await bookingsModel.findActiveByWorkerId(workerId)
+    if (activeJobs.length > 0) {
+      throw new Error('Complete your current job before starting a new one.')
+    }
+  }
+
   
   const updated = await bookingsModel.updateStatus(bookingId, status)
 
-  // Auto-update earnings on completion
+  // Auto‑update earnings on completion
   if (status === 'completed') {
     await pool.query(
       `UPDATE users 
@@ -128,7 +139,6 @@ async function updateBookingStatus(bookingId, workerId, status) {
     )
   }
 
-  // Emit specific status event
   emitBookingEvent(`booking.${status}`, updated)
 
   return updated

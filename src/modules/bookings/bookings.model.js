@@ -130,4 +130,12 @@ async function updateStatus(bookingId, status) {
   return result.rows[0]
 }
 
-module.exports = { createChatTables, findOrCreateConversation, saveMessage, getMessages, getUserConversations, markRead, create, findByWorkerId, findByCustomerId, findById, updateStatus }
+async function findActiveByWorkerId(workerId) {
+  const result = await pool.query(
+    `SELECT id FROM bookings WHERE worker_id = $1 AND status IN ('onway', 'working')`,
+    [workerId]
+  )
+  return result.rows
+}
+
+module.exports = { createChatTables, findOrCreateConversation, saveMessage, getMessages, getUserConversations, markRead, create, findByWorkerId, findByCustomerId, findById, updateStatus, findActiveByWorkerId }
