@@ -3,30 +3,43 @@ const { getIO } = require('../realtime/socket')
 const { pool } = require('../../config/database')
 
 // Standardized socket emitter
-function emitBookingEvent(event, booking, extra = {}) {
+async function emitBookingEvent(event, booking, extra = {}) {
   const io = getIO()
   if (!io) return
+
+  // Look up client_id for both parties so the event reaches the correct socket rooms
+  const { pool } = require('../../config/database')
+  const [customer, worker] = await Promise.all([
+    pool.query(`SELECT client_id FROM users WHERE id = $1`, [booking.customer_id]),
+    pool.query(`SELECT client_id FROM users WHERE id = $1`, [booking.worker_id]),
+  ])
+  const customerClientId = customer.rows[0]?.client_id || booking.customer_id
+  const workerClientId = worker.rows[0]?.client_id || booking.worker_id
 
   const payload = {
     event,
     bookingId: booking.id,
     status: booking.status,
-    workerId: booking.worker_id,
-    customerId: booking.customer_id,
+    customer_client_id: customerClientId,
+    worker_client_id: workerClientId,
+    job_type: booking.service_name || 'General Service',
+    job_size: booking.job_size,
+    price: booking.price,
     timestamp: new Date().toISOString(),
     ...extra,
   }
 
-  // Emit to involved users
-  io.to(`user:${booking.customer_id}`).emit(event, payload)
-  io.to(`user:${booking.worker_id}`).emit(event, payload)
+  // Emit to the two users’ personal rooms
+  io.to(`user:${customerClientId}`).emit(event, payload)
+  io.to(`user:${workerClientId}`).emit(event, payload)
 
-  // Emit to booking room (for admin/support monitoring)
+  // Emit to the booking room (admin can join)
   io.to(`booking:${booking.id}`).emit(event, payload)
 
   // Emit to admin room
   io.to('room:admin_all').emit(event, payload)
 }
+
 
 async function createBooking({ customerId, workerId, serviceName, jobSize }) {
     // Verify worker exists and is online
