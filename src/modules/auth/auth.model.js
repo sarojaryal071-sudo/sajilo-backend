@@ -102,7 +102,7 @@ async function findByEmail(email) {
 
 async function findById(id) {
   const result = await pool.query(
-    'SELECT id, email, role, name, legal_name, phone, photo_url, document_url, client_id, primary_skill, skills, hourly_rate, bio, status, created_at FROM users WHERE id = $1',
+    'SELECT id, email, role, name, legal_name, phone, photo_url, document_url, client_id, primary_skill, skills, hourly_rate, bio, status, welcomed, created_at FROM users WHERE id = $1',
     [id]
   )
   return result.rows[0] || null

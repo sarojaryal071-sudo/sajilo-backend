@@ -44,7 +44,8 @@ async function login({ email, password }) {
       name: user.name,
       status: user.status,
       client_id: user.client_id,
-      application_submitted,
+      welcomed: user.welcomed || false,
+      application_submitted
     },
     token,
   }

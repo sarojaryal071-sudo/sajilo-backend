@@ -107,4 +107,13 @@ async function getMyApplication(req, res, next) {
   }
 }
 
-module.exports = { getMe, updateMe, getWorkerMe, updateWorkerMe, getWorkerEarnings, getSchedule, saveSchedule, getMyApplication, }
+// sets the "welcomed" flag so the congratulations screen never appears again
+async function setWelcomed(req, res, next) {
+  try {
+    const { pool } = require('../../config/database')
+    await pool.query(`UPDATE users SET welcomed = true WHERE id = $1`, [req.user.id])
+    res.json({ success: true })
+  } catch (err) { next(err) }
+}
+
+module.exports = { getMe, updateMe, getWorkerMe, updateWorkerMe, getWorkerEarnings, getSchedule, saveSchedule, getMyApplication, setWelcomed }
