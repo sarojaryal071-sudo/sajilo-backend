@@ -54,4 +54,7 @@ app.use('/api/locations', require('./modules/locations/locations.routes'))
 
 app.use(errorHandler)
 
+app.use('/api/admin/support', require('./modules/admin/support.routes'))
+
+
 module.exports = app

@@ -1,6 +1,7 @@
 const bookingsModel = require('./bookings.model')
 const { getIO } = require('../realtime/socket')
 const { pool } = require('../../config/database')
+const chatModel = require('../chat/chat.model')   // ← new
 
 // Standardized socket emitter
 async function emitBookingEvent(event, booking, extra = {}) {
@@ -8,7 +9,6 @@ async function emitBookingEvent(event, booking, extra = {}) {
   if (!io) return
 
   // Look up client_id for both parties so the event reaches the correct socket rooms
-  const { pool } = require('../../config/database')
   const [customer, worker] = await Promise.all([
     pool.query(`SELECT client_id FROM users WHERE id = $1`, [booking.customer_id]),
     pool.query(`SELECT client_id FROM users WHERE id = $1`, [booking.worker_id]),
@@ -43,7 +43,6 @@ async function emitBookingEvent(event, booking, extra = {}) {
 
 async function createBooking({ customerId, workerId, serviceName, jobSize }) {
     // Verify worker exists and is online
-  const { pool } = require('../../config/database')
   const workerResult = await pool.query(
     `SELECT id, is_online FROM users WHERE id = $1 AND role = 'worker'`,
     [workerId]
@@ -88,9 +87,21 @@ async function acceptBooking(bookingId, workerId) {
   if (booking.status !== 'pending') throw new Error('Can only accept pending bookings')
   
   const updated = await bookingsModel.updateStatus(bookingId, 'accepted')
-  
+
+  // ✅ Auto‑create customer‑worker conversation
+  try {
+    await chatModel.findOrCreateConversation(
+      booking.customer_id,
+      workerId,
+      bookingId,
+      'customer_worker'
+    )
+  } catch (err) {
+    console.error('Failed to create conversation on accept:', err.message)
+    // Don’t block the acceptance
+  }
+
   emitBookingEvent('booking.accepted', updated)
-  // Notify other workers this booking is taken
   emitBookingEvent('booking.visibility.updated', updated, { visible: false })
 
   return updated
@@ -115,7 +126,6 @@ async function updateBookingStatus(bookingId, workerId, status) {
   if (booking.worker_id !== workerId) throw new Error('Not your booking')
 
   // ── Start‑Travel guards (only for 'onway') ──
-   // ── Start‑Travel guards (only for 'onway') ──
   if (status === 'onway') {
     // Single active job: worker cannot have another active job
     const activeJobs = await bookingsModel.findActiveByWorkerId(workerId)
@@ -124,7 +134,6 @@ async function updateBookingStatus(bookingId, workerId, status) {
     }
   }
 
-  
   const updated = await bookingsModel.updateStatus(bookingId, status)
 
   // Auto‑update earnings on completion
