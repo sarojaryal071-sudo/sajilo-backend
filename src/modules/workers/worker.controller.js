@@ -21,4 +21,14 @@ async function searchWorkers(req, res, next) {
   }
 }
 
-module.exports = { getWorker, searchWorkers }
+async function getCategories(req, res) {
+  try {
+    const { getEnabledProfessions } = require('../../config/workerCategories')
+    const categories = getEnabledProfessions()
+    res.json({ success: true, data: categories })
+  } catch (err) {
+    next(err)
+  }
+}
+
+module.exports = { getWorker, searchWorkers, getCategories }

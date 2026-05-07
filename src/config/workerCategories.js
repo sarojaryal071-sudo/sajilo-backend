@@ -10,11 +10,8 @@ const workerCategories = [
 ]
 
 function getProfessionCode(profession) {
-  const category = workerCategories.find(
-    c => c.role === profession && c.enabled
-  )
-  if (!category) return 'WK'
-  return category.code
+  if (!profession || typeof profession !== 'string') return 'WK'
+  return profession.trim().substring(0, 2).toUpperCase()   // e.g., "driver" → "DR"
 }
 
 function getEnabledProfessions() {

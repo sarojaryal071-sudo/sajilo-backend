@@ -24,11 +24,12 @@ async function findByClientId(clientId) {
 }
 
 async function searchWorkers({ service, location, minRating, limit = 20 }) {
-  let query = `
+    let query = `
     SELECT 
       u.id, u.client_id, u.name, u.photo_url,
       COALESCE(u.primary_skill, wa.primary_role) AS primary_skill,
       wa.secondary_roles,
+      wa.service_area,    -- ← add this
       u.skills, u.hourly_rate, u.is_online, u.completed_jobs
     FROM users u
     LEFT JOIN worker_applications wa ON wa.user_id = u.id
@@ -37,6 +38,12 @@ async function searchWorkers({ service, location, minRating, limit = 20 }) {
       AND u.is_online = true
   `
   const params = []
+
+  if (location) {
+    params.push(`%${location}%`)
+    query += ` AND wa.service_area ILIKE $${params.length}`
+  }
+
 
   if (service) {
     params.push(`%${service}%`)

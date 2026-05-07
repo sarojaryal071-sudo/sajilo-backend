@@ -6,6 +6,8 @@ const router = require('express').Router()
 const workerController = require('./worker.controller')
 const authGuard = require('../../middleware/auth.guard')
 
+router.get('/categories', workerController.getCategories)
+
 // Public: search workers (future auth optional)
 router.get('/search', workerController.searchWorkers)
 

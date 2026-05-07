@@ -50,6 +50,7 @@ app.use('/api/admin', adminRoutes)
 app.use('/api/notifications', notificationRoutes)
 app.use('/api/chat', chatRoutes)
 app.use('/api/workers', workerRoutes)
+app.use('/api/locations', require('./modules/locations/locations.routes'))
 
 app.use(errorHandler)
 
