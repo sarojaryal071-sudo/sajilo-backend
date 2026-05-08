@@ -57,12 +57,43 @@ function initializeSocket(server) {
           sender_role: sender?.role,
           sender_client_id: senderClientId
         }
+
+        // Emit the message itself
         if (receiver?.role === 'admin') {
           io.to('room:admin_all').emit('new_message', msg)
         } else {
           io.to(receiverRoom).emit('new_message', msg)
         }
         socket.emit('message_sent', msg)
+
+        // ── Emit conversation_updated so inbox lists update live ──
+        const convDataForSender = {
+          id: message.conversation_id,
+          other_name: receiver?.name || 'Unknown',
+          other_role: receiver?.role,
+          booking_id: bookingId,
+          last_message: text,
+          last_message_at: new Date().toISOString(),
+        }
+        const convDataForReceiver = {
+          id: message.conversation_id,
+          other_name: sender?.name || 'Unknown',
+          other_role: sender?.role,
+          booking_id: bookingId,
+          last_message: text,
+          last_message_at: new Date().toISOString(),
+        }
+
+        io.to(`user:${senderClientId}`).emit('conversation_updated', convDataForSender)
+        if (receiver?.role === 'admin') {
+          io.to('room:admin_all').emit('conversation_updated', {
+            ...convDataForReceiver,
+            other_name: sender?.name || 'Unknown',
+            other_role: sender?.role,
+          })
+        } else {
+          io.to(receiverRoom).emit('conversation_updated', convDataForReceiver)
+        }
       } catch (err) {
         console.error('[SEND_MSG] Error:', err.message)
         socket.emit('message_error', { error: err.message })
