@@ -63,6 +63,8 @@ async function getMessages(conversationId, limit = 50) {
 }
 
 async function getUserConversations(userId) {
+  // customer_worker conversations are only visible while the job is accepted or on‑the‑way.
+  // Other conversation types (e.g. admin support) are always visible.
   const result = await pool.query(
     `SELECT c.*, 
       CASE WHEN c.customer_id = $1 THEN u2.name ELSE u1.name END as other_name,
@@ -71,7 +73,9 @@ async function getUserConversations(userId) {
      FROM conversations c
      JOIN users u1 ON c.customer_id = u1.id
      JOIN users u2 ON c.worker_id = u2.id
-     WHERE c.customer_id = $1 OR c.worker_id = $1
+     LEFT JOIN bookings b ON c.booking_id = b.id AND c.conversation_type = 'customer_worker'
+     WHERE (c.customer_id = $1 OR c.worker_id = $1)
+       AND (c.conversation_type != 'customer_worker' OR b.status IN ('accepted', 'onway'))
      ORDER BY c.last_message_at DESC`,
     [userId]
   )
@@ -108,8 +112,9 @@ async function findByWorkerId(workerId) {
 
 async function findByCustomerId(customerId) {
   const result = await pool.query(
-    `SELECT b.*, u.name as worker_name
-     FROM bookings b JOIN users u ON b.worker_id = u.id
+    `SELECT b.*, u.name as worker_name, u.client_id as worker_client_id
+     FROM bookings b 
+     JOIN users u ON b.worker_id = u.id
      WHERE b.customer_id = $1
      ORDER BY b.created_at DESC`,
     [customerId]

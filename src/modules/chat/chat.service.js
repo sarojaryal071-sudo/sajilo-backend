@@ -17,12 +17,12 @@ async function canMessage(senderId, receiverId, bookingId) {
   // Same role cannot message each other
   if (sender.role === receiver.role) return false
 
-  // Customer and worker require an active booking
+  // Customer and worker require an active booking in the allowed window
   if (!bookingId) return false
 
   const { pool } = require('../../config/database')
   const result = await pool.query(
-    `SELECT * FROM bookings WHERE id = $1 AND status IN ('accepted', 'onway', 'working')`,
+    `SELECT * FROM bookings WHERE id = $1 AND status IN ('accepted', 'onway')`,
     [bookingId]
   )
   return result.rows.length > 0
