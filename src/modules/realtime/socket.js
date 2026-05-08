@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken')
 const config = require('../../config/environment')
+const { getUserRoom } = require('../../utils/socketRooms')
 
 let io = null
 let chatService = null
@@ -27,9 +28,10 @@ function initializeSocket(server) {
 
   io.on('connection', (socket) => {
     const { id, role, client_id } = socket.user
-    const prefixedId = client_id || `U${id}`
-    console.log(`Socket connected: ${prefixedId} (${role})`)
-    socket.join(`user:${prefixedId}`)
+    const room = getUserRoom(id, client_id)
+    const prefixedId = room.replace('user:', '')   // restore short identifier for logs and legacy
+    console.log(`Socket connected: ${room} (${role})`)
+    socket.join(room)
 
     // Join booking-specific rooms
     socket.on('join_booking', (bookingId) => {
@@ -47,7 +49,7 @@ function initializeSocket(server) {
         const sender = await authModel.findById(id)
         const receiver = await authModel.findById(receiverId)
         const senderClientId = sender?.client_id || prefixedId
-        const receiverClientId = receiver?.client_id || receiverId
+        const receiverRoom = getUserRoom(receiverId, receiver?.client_id)
         const message = await chatService.sendMessage(id, receiverId, text, bookingId)
         const msg = {
           ...message,
@@ -58,7 +60,7 @@ function initializeSocket(server) {
         if (receiver?.role === 'admin') {
           io.to('room:admin_all').emit('new_message', msg)
         } else {
-          io.to(`user:${receiverClientId}`).emit('new_message', msg)
+          io.to(receiverRoom).emit('new_message', msg)
         }
         socket.emit('message_sent', msg)
       } catch (err) {

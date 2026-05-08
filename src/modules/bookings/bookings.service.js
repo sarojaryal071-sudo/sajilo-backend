@@ -1,7 +1,8 @@
 const bookingsModel = require('./bookings.model')
 const { getIO } = require('../realtime/socket')
 const { pool } = require('../../config/database')
-const chatModel = require('../chat/chat.model')   // ← new
+const chatModel = require('../chat/chat.model')
+const { getUserRoom } = require('../../utils/socketRooms')
 
 // Standardized socket emitter
 async function emitBookingEvent(event, booking, extra = {}) {
@@ -13,8 +14,11 @@ async function emitBookingEvent(event, booking, extra = {}) {
     pool.query(`SELECT client_id FROM users WHERE id = $1`, [booking.customer_id]),
     pool.query(`SELECT client_id FROM users WHERE id = $1`, [booking.worker_id]),
   ])
-  const customerClientId = customer.rows[0]?.client_id || booking.customer_id
-  const workerClientId = worker.rows[0]?.client_id || booking.worker_id
+
+  const customerClientId = customer.rows[0]?.client_id || `U${booking.customer_id}`
+  const workerClientId = worker.rows[0]?.client_id || `U${booking.worker_id}`
+  const customerRoom = `user:${customerClientId}`
+  const workerRoom = `user:${workerClientId}`
 
   const payload = {
     event,
@@ -30,8 +34,8 @@ async function emitBookingEvent(event, booking, extra = {}) {
   }
 
   // Emit to the two users’ personal rooms
-  io.to(`user:${customerClientId}`).emit(event, payload)
-  io.to(`user:${workerClientId}`).emit(event, payload)
+  io.to(customerRoom).emit(event, payload)
+  io.to(workerRoom).emit(event, payload)
 
   // Emit to the booking room (admin can join)
   io.to(`booking:${booking.id}`).emit(event, payload)
@@ -40,9 +44,8 @@ async function emitBookingEvent(event, booking, extra = {}) {
   io.to('room:admin_all').emit(event, payload)
 }
 
-
 async function createBooking({ customerId, workerId, serviceName, jobSize }) {
-    // Verify worker exists and is online
+  // Verify worker exists and is online
   const workerResult = await pool.query(
     `SELECT id, is_online FROM users WHERE id = $1 AND role = 'worker'`,
     [workerId]
@@ -146,6 +149,16 @@ async function updateBookingStatus(bookingId, workerId, status) {
        WHERE id = $2`,
       [booking.price || 0, workerId]
     )
+
+    // ✅ Auto‑delete customer‑worker conversation when the job is done
+    try {
+      await pool.query(
+        `DELETE FROM conversations WHERE booking_id = $1 AND conversation_type = 'customer_worker'`,
+        [bookingId]
+      )
+    } catch (err) {
+      console.error('Failed to delete conversation on complete:', err.message)
+    }
   }
 
   emitBookingEvent(`booking.${status}`, updated)
