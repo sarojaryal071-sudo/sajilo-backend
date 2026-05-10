@@ -42,17 +42,16 @@ app.get('/api/health', (req, res) => {
 })
 
 const adminRoutes = require('./modules/admin/admin.routes')
-const notificationRoutes = require('./modules/notifications/notification.routes')
 
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/bookings', bookingRoutes)
 app.use('/api/admin', adminRoutes)
-app.use('/api/notifications', notificationRoutes)
 app.use('/api/chat', chatRoutes)
 app.use('/api/workers', workerRoutes)
 app.use('/api/locations', require('./modules/locations/locations.routes'))
 app.use('/api/reviews', require('./modules/reviews/reviews.routes'))
+app.use('/api/notifications', require('./modules/notification/notification.routes'))
 app.use('/api/payments', require('./modules/payments/payments.routes'))
 
 app.use(errorHandler)

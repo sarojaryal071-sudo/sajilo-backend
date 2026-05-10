@@ -3,6 +3,7 @@ const paymentsService = require('../payments/payments.service')
 const { getIO } = require('../realtime/socket')
 const { pool } = require('../../config/database')
 const chatModel = require('../chat/chat.model')
+const notificationsService = require('../notification/notification.service')
 const { getUserRoom } = require('../../utils/socketRooms')
 
 // Standardized socket emitter
@@ -67,6 +68,23 @@ async function createBooking({ customerId, workerId, serviceName, jobSize }) {
   })
 
   emitBookingEvent('booking.created', booking)
+
+  // Notify worker about new booking request
+  try {
+    await notificationsService.createNotification({
+      userId: booking.worker_id,
+      userRole: 'worker',
+      type: 'booking_created',
+      title: 'New booking request',
+      message: `New booking #${booking.id} from client`,
+      entityType: 'booking',
+      entityId: booking.id,
+      metadata: { booking_id: booking.id, customer_id: booking.customer_id },
+    })
+  } catch (err) {
+    console.error('Notification creation failed (booking.created):', err)
+  }
+
   return booking
 }
 
@@ -108,6 +126,22 @@ async function acceptBooking(bookingId, workerId) {
   emitBookingEvent('booking.accepted', updated)
   emitBookingEvent('booking.visibility.updated', updated, { visible: false })
 
+  // Notify customer that booking was accepted
+  try {
+    await notificationsService.createNotification({
+      userId: booking.customer_id,
+      userRole: 'customer',
+      type: 'booking_accepted',
+      title: 'Worker accepted your booking',
+      message: `Booking #${booking.id} has been accepted`,
+      entityType: 'booking',
+      entityId: booking.id,
+      metadata: { booking_id: booking.id, worker_id: booking.worker_id },
+    })
+  } catch (err) {
+    console.error('Notification creation failed (booking.accepted):', err)
+  }
+
   return updated
 }
 
@@ -120,6 +154,22 @@ async function rejectBooking(bookingId, workerId) {
   
   emitBookingEvent('booking.rejected', updated)
   emitBookingEvent('booking.visibility.updated', updated, { visible: true })
+
+  // Notify customer that booking was rejected
+  try {
+    await notificationsService.createNotification({
+      userId: booking.customer_id,
+      userRole: 'customer',
+      type: 'booking_rejected',
+      title: 'Worker rejected your booking',
+      message: `Booking #${booking.id} was rejected`,
+      entityType: 'booking',
+      entityId: booking.id,
+      metadata: { booking_id: booking.id, worker_id: booking.worker_id },
+    })
+  } catch (err) {
+    console.error('Notification creation failed (booking.rejected):', err)
+  }
 
   return updated
 }
@@ -152,13 +202,15 @@ async function updateBookingStatus(bookingId, workerId, status) {
     )
 
     // ✅ Auto‑delete customer‑worker conversation when the job is done
+    console.log(`🧹 Attempting to delete conversation for booking ${bookingId}`);
     try {
-      await pool.query(
+      const delResult = await pool.query(
         `DELETE FROM conversations WHERE booking_id = $1 AND conversation_type = 'customer_worker'`,
         [bookingId]
-      )
+      );
+      console.log(`🧹 Delete result: ${delResult.rowCount} row(s) deleted`);
     } catch (err) {
-      console.error('Failed to delete conversation on complete:', err.message)
+      console.error('Failed to delete conversation on complete:', err.message);
     }
 
     // ✅ Auto‑create payment record (idempotent)
@@ -170,6 +222,24 @@ async function updateBookingStatus(bookingId, workerId, status) {
   }
 
   emitBookingEvent(`booking.${status}`, updated)
+
+  // Create a notification only for the completed state (review reminder)
+  if (status === 'completed') {
+    try {
+      await notificationsService.createNotification({
+        userId: booking.customer_id,
+        userRole: 'customer',
+        type: 'booking_completed',
+        title: `Job completed`,
+        message: `Booking #${booking.id} has been completed. How was your experience?`,
+        entityType: 'booking',
+        entityId: booking.id,
+        metadata: { booking_id: booking.id, status },
+      })
+    } catch (err) {
+      console.error('Notification creation failed (completed):', err)
+    }
+  }
 
   return updated
 }
@@ -203,6 +273,23 @@ async function cancelBooking(bookingId, userId, reason = null) {
   }
 
   emitBookingEvent('booking.updated', updated, { previousStatus: booking.status })
+
+  // Notify worker about the cancellation
+  try {
+    await notificationsService.createNotification({
+      userId: booking.worker_id,
+      userRole: 'worker',
+      type: 'booking_cancelled',
+      title: 'Booking cancelled by customer',
+      message: `Booking #${booking.id} has been cancelled`,
+      entityType: 'booking',
+      entityId: booking.id,
+      metadata: { booking_id: booking.id, reason: reason },
+    })
+  } catch (err) {
+    console.error('Notification creation failed (booking.cancelled):', err)
+  }
+
   return updated
 }
 

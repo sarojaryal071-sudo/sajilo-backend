@@ -3,6 +3,7 @@ const paymentsService = require('./payments.service');
 const { getIO } = require('../realtime/socket');
 const { pool } = require('../../config/database');
 const { getUserRoom } = require('../../utils/socketRooms');
+const notificationsService = require('../notification/notification.service');
 
 /**
  * Helper: emit payment.updated to relevant rooms
@@ -76,6 +77,23 @@ async function confirmInvoice(req, res) {
       { discount_amount, extra_items, payment_method }
     );
     await emitPaymentUpdated(updated);
+
+    // Notify customer that invoice is ready
+    try {
+      await notificationsService.createNotification({
+        userId: updated.customer_id,
+        userRole: 'customer',
+        type: 'invoice_ready',
+        title: 'Invoice ready',
+        message: `Invoice for booking #${bookingId} is ready for payment`,
+        entityType: 'payment',
+        entityId: updated.id,
+        metadata: { booking_id: Number(bookingId), payment_id: updated.payment_id },
+      });
+    } catch (err) {
+      console.error('Notification creation failed (invoice_ready):', err);
+    }
+
     return res.json({ payment: updated });
   } catch (err) {
     console.error('confirmInvoice error:', err);
@@ -103,6 +121,23 @@ async function confirmCash(req, res) {
 
     const updated = await paymentsService.confirmCashPayment(Number(bookingId), customerId);
     await emitPaymentUpdated(updated);
+
+    // Notify the worker that payment has been made
+    try {
+      await notificationsService.createNotification({
+        userId: updated.worker_id,
+        userRole: 'worker',
+        type: 'payment_paid',
+        title: 'Payment received',
+        message: `Payment for booking #${bookingId} has been paid`,
+        entityType: 'payment',
+        entityId: updated.id,
+        metadata: { booking_id: Number(bookingId), payment_id: updated.payment_id, paid_by: 'customer' },
+      });
+    } catch (err) {
+      console.error('Notification creation failed (payment_paid by customer):', err);
+    }
+
     return res.json({ payment: updated });
   } catch (err) {
     console.error('confirmCash error:', err);
@@ -140,6 +175,23 @@ async function markCashPaid(req, res) {
 
     const updated = await paymentsService.markCashPaidByWorker(Number(bookingId), workerId);
     await emitPaymentUpdated(updated);
+
+    // Notify customer that payment was confirmed by worker
+    try {
+      await notificationsService.createNotification({
+        userId: updated.customer_id,
+        userRole: 'customer',
+        type: 'payment_paid',
+        title: 'Payment confirmed',
+        message: `Payment for booking #${bookingId} has been confirmed by the worker`,
+        entityType: 'payment',
+        entityId: updated.id,
+        metadata: { booking_id: Number(bookingId), payment_id: updated.payment_id, paid_by: 'worker' },
+      });
+    } catch (err) {
+      console.error('Notification creation failed (payment_paid by worker):', err);
+    }
+
     return res.json({ payment: updated });
   } catch (err) {
     console.error('markCashPaid error:', err);
