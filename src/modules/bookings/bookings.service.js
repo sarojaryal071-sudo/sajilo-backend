@@ -1,4 +1,5 @@
 const bookingsModel = require('./bookings.model')
+const paymentsService = require('../payments/payments.service')
 const { getIO } = require('../realtime/socket')
 const { pool } = require('../../config/database')
 const chatModel = require('../chat/chat.model')
@@ -158,6 +159,13 @@ async function updateBookingStatus(bookingId, workerId, status) {
       )
     } catch (err) {
       console.error('Failed to delete conversation on complete:', err.message)
+    }
+
+    // ✅ Auto‑create payment record (idempotent)
+    try {
+      await paymentsService.ensurePaymentForCompletedBooking(updated)
+    } catch (err) {
+      console.error('Failed to create payment record on complete:', err.message)
     }
   }
 

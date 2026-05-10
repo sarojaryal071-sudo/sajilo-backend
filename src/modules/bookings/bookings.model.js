@@ -101,8 +101,11 @@ async function create({ customerId, workerId, serviceName, jobSize, scheduledDat
 
 async function findByWorkerId(workerId) {
   const result = await pool.query(
-    `SELECT b.*, u.name as customer_name, u.email as customer_email
-     FROM bookings b JOIN users u ON b.customer_id = u.id
+    `SELECT b.*, u.name as customer_name, u.email as customer_email, u.client_id as customer_client_id,
+            r.rating as review_rating
+     FROM bookings b
+     JOIN users u ON b.customer_id = u.id
+     LEFT JOIN reviews r ON r.booking_id = b.id
      WHERE b.worker_id = $1
      ORDER BY b.created_at DESC`,
     [workerId]
@@ -112,9 +115,11 @@ async function findByWorkerId(workerId) {
 
 async function findByCustomerId(customerId) {
   const result = await pool.query(
-    `SELECT b.*, u.name as worker_name, u.client_id as worker_client_id
+    `SELECT b.*, u.name as worker_name, u.client_id as worker_client_id,
+            CASE WHEN r.id IS NOT NULL THEN true ELSE false END as reviewed
      FROM bookings b 
      JOIN users u ON b.worker_id = u.id
+     LEFT JOIN reviews r ON r.booking_id = b.id
      WHERE b.customer_id = $1
      ORDER BY b.created_at DESC`,
     [customerId]
