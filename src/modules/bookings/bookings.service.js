@@ -166,4 +166,37 @@ async function updateBookingStatus(bookingId, workerId, status) {
   return updated
 }
 
-module.exports = { createBooking, getBooking, getUserBookings, getWorkerBookings, acceptBooking, rejectBooking, updateBookingStatus }
+// Customer cancels a booking (pending / accepted / onway)
+// Customer cancels a booking (pending / accepted / onway)
+async function cancelBooking(bookingId, userId, reason = null) {
+  const booking = await bookingsModel.findById(bookingId)
+  if (!booking) throw new Error('Booking not found')
+  if (booking.customer_id !== userId) throw new Error('Not your booking')
+  if (!['pending', 'accepted', 'onway'].includes(booking.status)) {
+    throw new Error('Booking can only be cancelled while pending, accepted, or on the way')
+  }
+
+  const updated = await bookingsModel.updateStatus(bookingId, 'cancelled')
+
+  // Record cancellation
+  try {
+    const cancellationModel = require('./cancellation.model')
+    await cancellationModel.createCancellation({
+      bookingId: booking.id,
+      cancelledById: userId,
+      cancelledByRole: 'customer',
+      statusAtCancel: booking.status,
+      workerId: booking.worker_id,
+      reason: reason || null,
+      bookingCreatedAt: booking.created_at,
+    })
+  } catch (err) {
+    console.error('Failed to record cancellation:', err.message)
+  }
+
+  emitBookingEvent('booking.updated', updated, { previousStatus: booking.status })
+  return updated
+}
+
+
+module.exports = { createBooking, getBooking, getUserBookings, getWorkerBookings, acceptBooking, rejectBooking, updateBookingStatus, cancelBooking }

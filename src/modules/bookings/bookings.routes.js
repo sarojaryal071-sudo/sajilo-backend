@@ -10,6 +10,7 @@ router.get('/my', authGuard, bookingsController.getMyBookings)
 router.get('/:id', authGuard, bookingsController.getById)
 router.put('/:id/accept', authGuard, roleGuard('worker'), bookingsController.accept)
 router.put('/:id/reject', authGuard, roleGuard('worker'), bookingsController.reject)
+router.put('/:id/cancel', authGuard, roleGuard('customer'), bookingsController.cancel)
 router.put('/:id/status', authGuard, roleGuard('worker'), bookingsController.updateStatus)
 
 module.exports = router

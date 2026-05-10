@@ -61,4 +61,12 @@ async function updateStatus(req, res, next) {
   } catch (err) { next(err) }
 }
 
-module.exports = { create, getById, getMyBookings, getWorkerBookings, accept, reject, updateStatus }
+async function cancel(req, res, next) {
+  try {
+    const booking = await bookingsService.cancelBooking(req.params.id, req.user.id, req.body.reason || null)
+    res.json({ success: true, data: booking })
+  } catch (err) { next(err) }
+}
+
+
+module.exports = { create, getById, getMyBookings, getWorkerBookings, accept, reject, updateStatus, cancel }
