@@ -2,12 +2,13 @@ const bookingsService = require('./bookings.service')
 
 async function create(req, res, next) {
   try {
-    const { workerId, serviceName, jobSize } = req.body
+    const { workerId, serviceName, jobSize, selectedServices } = req.body
     const booking = await bookingsService.createBooking({
       customerId: req.user.id,
       workerId,
       serviceName,
       jobSize,
+      selectedServices: selectedServices || [],
     })
     res.status(201).json({ success: true, data: booking })
   } catch (err) {

@@ -89,12 +89,12 @@ async function markRead(conversationId, userId) {
   )
 }
 
-async function create({ customerId, workerId, serviceName, jobSize, scheduledDate, urgency, price }) {
+async function create({ customerId, workerId, serviceName, jobSize, scheduledDate, urgency, price, servicesSnapshot = null, totalPrice = null }) {
   const result = await pool.query(
-    `INSERT INTO bookings (customer_id, worker_id, service_name, job_size, status, schedule_date, schedule_time, price)
-     VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7)
+    `INSERT INTO bookings (customer_id, worker_id, service_name, job_size, status, schedule_date, schedule_time, price, services_snapshot, booking_total_price)
+     VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7, $8::jsonb, $9)
      RETURNING *`,
-    [customerId, workerId, serviceName, jobSize, scheduledDate, urgency || 'now', price || 0]
+    [customerId, workerId, serviceName, jobSize, scheduledDate, urgency || 'now', totalPrice != null ? totalPrice : (price || 0), servicesSnapshot ? JSON.stringify(servicesSnapshot) : null, totalPrice]
   )
   return result.rows[0]
 }

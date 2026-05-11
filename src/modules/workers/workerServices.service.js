@@ -122,10 +122,55 @@ async function deleteWorkerService(workerId, serviceId) {
   );
 }
 
+async function getPublicWorkerServices(workerId) {
+  // 1. Fetch all worker professions (even those without services yet)
+  const profsResult = await pool.query(
+    `SELECT p.id, p.name, p.icon
+     FROM worker_professions wp
+     JOIN professions p ON p.id = wp.profession_id
+     WHERE wp.worker_id = $1 AND p.is_active = true`,
+    [workerId]
+  );
+  const professions = profsResult.rows;
+
+  // 2. For each profession, fetch its active services
+  for (const prof of professions) {
+    const svcResult = await pool.query(
+      `SELECT
+         ps.id AS service_id,
+         ps.label,
+         ps.label_np,
+         ws.price AS worker_price,
+         ws.is_active,
+         false AS is_custom,
+         NULL AS custom_label
+       FROM worker_services ws
+       JOIN profession_services ps ON ps.id = ws.service_id
+       WHERE ws.worker_id = $1 AND ws.profession_id = $2 AND ws.is_active = true AND ps.is_active = true
+       UNION
+       SELECT
+         NULL AS service_id,
+         ws.custom_label AS label,
+         NULL AS label_np,
+         ws.price AS worker_price,
+         ws.is_active,
+         true AS is_custom,
+         ws.custom_label
+       FROM worker_services ws
+       WHERE ws.worker_id = $1 AND ws.profession_id = $2 AND ws.is_active = true AND ws.service_id IS NULL`,
+      [workerId, prof.id]
+    );
+    prof.services = svcResult.rows;
+  }
+
+  return professions;
+}
+
 module.exports = {
   getWorkerServices,
   updateWorkerService,
   createCustomService,
   activateService,
   deleteWorkerService,
+  getPublicWorkerServices,
 };

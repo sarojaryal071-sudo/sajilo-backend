@@ -46,28 +46,67 @@ async function emitBookingEvent(event, booking, extra = {}) {
   io.to('room:admin_all').emit(event, payload)
 }
 
-async function createBooking({ customerId, workerId, serviceName, jobSize }) {
+async function createBooking({ customerId, workerId, serviceName, jobSize, selectedServices = [] }) {
   // Verify worker exists and is online
   const workerResult = await pool.query(
     `SELECT id, is_online FROM users WHERE id = $1 AND role = 'worker'`,
     [workerId]
-  )
-  const worker = workerResult.rows[0]
-  if (!worker) {
-    throw new Error('Worker not found')
+  );
+  const worker = workerResult.rows[0];
+  if (!worker) throw new Error('Worker not found');
+  if (!worker.is_online) throw new Error('Worker is currently offline and cannot accept new bookings');
+
+  let servicesSnapshot = null;
+  let totalPrice = null;
+
+  // If selected services are provided, validate and compute total
+  if (selectedServices && selectedServices.length > 0) {
+    const serviceIds = selectedServices.map(s => s.service_id);
+
+    // Fetch worker's active services that match
+    const svcResult = await pool.query(
+      `SELECT ps.id AS service_id, ps.label, p.name AS profession_name, ws.price
+       FROM worker_services ws
+       JOIN profession_services ps ON ps.id = ws.service_id
+       JOIN professions p ON p.id = ws.profession_id
+       WHERE ws.worker_id = $1
+         AND ws.is_active = true
+         AND ps.is_active = true
+         AND ws.service_id = ANY($2::int[])`,
+      [workerId, serviceIds]
+    );
+
+    if (svcResult.rows.length !== serviceIds.length) {
+      throw new Error('One or more selected services are inactive or unavailable');
+    }
+
+    // Build snapshot
+    servicesSnapshot = svcResult.rows.map(row => ({
+      service_id: row.service_id,
+      label: row.label,
+      profession_label: row.profession_name,
+      price: parseFloat(row.price),
+    }));
+
+    // Compute total (server-authoritative)
+    totalPrice = servicesSnapshot.reduce((sum, svc) => sum + svc.price, 0);
   }
-  if (!worker.is_online) {
-    throw new Error('Worker is currently offline and cannot accept new bookings')
-  }
+
+  // Build the booking name from services or fall back to passed serviceName
+  const computedServiceName = servicesSnapshot
+    ? servicesSnapshot.map(s => s.label).join(' + ')
+    : (serviceName || 'General Service');
 
   const booking = await bookingsModel.create({
     customerId,
     workerId,
-    serviceName: serviceName || 'General Service',
+    serviceName: computedServiceName,
     jobSize: jobSize || 'medium',
-  })
+    servicesSnapshot,
+    totalPrice,
+  });
 
-  emitBookingEvent('booking.created', booking)
+  emitBookingEvent('booking.created', booking);
 
   // Notify worker about new booking request
   try {
@@ -80,12 +119,12 @@ async function createBooking({ customerId, workerId, serviceName, jobSize }) {
       entityType: 'booking',
       entityId: booking.id,
       metadata: { booking_id: booking.id, customer_id: booking.customer_id },
-    })
+    });
   } catch (err) {
-    console.error('Notification creation failed (booking.created):', err)
+    console.error('Notification creation failed (booking.created):', err);
   }
 
-  return booking
+  return booking;
 }
 
 async function getBooking(bookingId) {

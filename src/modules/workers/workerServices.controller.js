@@ -63,4 +63,15 @@ async function deleteService(req, res) {
   }
 }
 
-module.exports = { getMyServices, updateService, createCustom, activateService, deleteService };
+async function getPublicServices(req, res) {
+  try {
+    const workerId = Number(req.params.workerId);
+    const data = await workerServicesService.getPublicWorkerServices(workerId);
+    return res.json({ success: true, data: { professions: data } });
+  } catch (err) {
+    console.error('getPublicServices error:', err);
+    return res.status(500).json({ error: 'Failed to fetch worker services' });
+  }
+}
+
+module.exports = { getMyServices, updateService, createCustom, activateService, deleteService, getPublicServices };
