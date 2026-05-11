@@ -1,0 +1,2 @@
+ALTER TABLE profession_services
+  ADD COLUMN IF NOT EXISTS base_price DECIMAL(10,2) DEFAULT NULL;

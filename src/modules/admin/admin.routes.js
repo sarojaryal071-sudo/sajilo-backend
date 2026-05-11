@@ -12,5 +12,7 @@ router.get('/customers', authGuard, roleGuard('admin'), adminController.getCusto
 
 // Analytics
 router.use('/analytics', authGuard, roleGuard('admin'), require('./admin.analytics.routes'))
+router.use('/professions', authGuard, roleGuard('admin'), require('./admin.professions.routes'))
+router.use('/professions', authGuard, roleGuard('admin'), require('./admin.professionServices.routes'))
 
 module.exports = router
