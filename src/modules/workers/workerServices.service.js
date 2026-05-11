@@ -8,7 +8,7 @@ const { pool } = require('../../config/database');
  * Returns an array of { id, name, icon }.
  */
 async function resolveProfessions(workerId) {
-  // 1. Try the new table first
+  // 1. Try the new worker_professions table first
   const wpResult = await pool.query(
     `SELECT p.id, p.name, p.icon
      FROM worker_professions wp
@@ -18,22 +18,28 @@ async function resolveProfessions(workerId) {
   );
   if (wpResult.rows.length > 0) return wpResult.rows;
 
-  // 2. Fall back to legacy sign‑up fields
+  // 2. Fall back to legacy sign‑up fields (users + worker_applications)
   const userResult = await pool.query(
-    `SELECT primary_skill, secondary_roles FROM users WHERE id = $1`,
+    `SELECT u.primary_skill, u.secondary_roles,
+            wa.primary_role AS app_primary,
+            wa.secondary_roles AS app_secondaries
+     FROM users u
+     LEFT JOIN worker_applications wa ON wa.user_id = u.id
+     WHERE u.id = $1`,
     [workerId]
   );
-  const user = userResult.rows[0];
-  if (!user) return [];
+  const row = userResult.rows[0];
+  if (!row) return [];
 
-  // Build a deduplicated list of profession names from sign‑up
+  // Collect profession names, preferring application data, then user fields
   const names = [];
-  if (user.primary_skill) names.push(user.primary_skill.trim());
-  if (Array.isArray(user.secondary_roles)) {
-    user.secondary_roles.forEach(r => {
-      if (r) names.push(String(r).trim());
-    });
-  }
+  const add = (val) => {
+    if (val && !names.includes(val.trim())) names.push(val.trim());
+  };
+
+  add(row.app_primary || row.primary_skill);
+  (row.app_secondaries || row.secondary_roles || []).forEach(r => add(r));
+
   if (names.length === 0) return [];
 
   // Ensure each name exists in the professions table (upsert)
