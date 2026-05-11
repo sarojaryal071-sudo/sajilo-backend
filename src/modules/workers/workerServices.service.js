@@ -2,21 +2,58 @@
 const { pool } = require('../../config/database');
 
 /**
- * Get all services for a worker, grouped by profession.
- * Returns admin-defined services, with the worker's overrides where they exist.
+ * Resolve the worker's professions from either the new worker_professions table
+ * or by falling back to the user's primary_skill and secondary_roles fields.
+ *
+ * Returns an array of { id, name, icon }.
  */
-async function getWorkerServices(workerId) {
-  // 1. Fetch worker professions
-  const profsResult = await pool.query(
+async function resolveProfessions(workerId) {
+  // 1. Try the new table first
+  const wpResult = await pool.query(
     `SELECT p.id, p.name, p.icon
      FROM worker_professions wp
      JOIN professions p ON p.id = wp.profession_id
      WHERE wp.worker_id = $1 AND p.is_active = true`,
     [workerId]
   );
-  const professions = profsResult.rows;
+  if (wpResult.rows.length > 0) return wpResult.rows;
 
-  // 2. For each profession, fetch admin services + worker overrides
+  // 2. Fall back to legacy sign‑up fields
+  const userResult = await pool.query(
+    `SELECT primary_skill, secondary_roles FROM users WHERE id = $1`,
+    [workerId]
+  );
+  const user = userResult.rows[0];
+  if (!user) return [];
+
+  // Build a list of profession names: primary first, then secondaries
+  const names = [];
+  if (user.primary_skill) names.push(user.primary_skill.trim().toLowerCase());
+  if (Array.isArray(user.secondary_roles)) {
+    user.secondary_roles.forEach(r => {
+      if (r) names.push(String(r).trim().toLowerCase());
+    });
+  }
+
+  if (names.length === 0) return [];
+
+  // Match against the professions table (slug or name, case‑insensitive)
+  const result = await pool.query(
+    `SELECT id, name, icon FROM professions
+     WHERE is_active = true
+       AND (LOWER(slug) = ANY($1::text[]) OR LOWER(name) = ANY($1::text[]))
+     ORDER BY sort_order, id`,
+    [names]
+  );
+  return result.rows;
+}
+
+/**
+ * Get all services for a worker, grouped by profession.
+ */
+async function getWorkerServices(workerId) {
+  const professions = await resolveProfessions(workerId);
+
   for (const prof of professions) {
     const svcResult = await pool.query(
       `SELECT
@@ -82,19 +119,16 @@ async function createCustomService(workerId, { profession_id, custom_label, pric
   return result.rows[0];
 }
 
-
 /**
  * Upsert a worker_service row for an admin-defined service.
  */
 async function activateService(workerId, professionId, serviceId, isActive) {
-  // check if row already exists for this service
   const existing = await pool.query(
     'SELECT id FROM worker_services WHERE worker_id = $1 AND service_id = $2',
     [workerId, serviceId]
   );
 
   if (existing.rows.length > 0) {
-    // update
     const result = await pool.query(
       'UPDATE worker_services SET is_active = $3 WHERE id = $1 AND worker_id = $2 RETURNING *',
       [existing.rows[0].id, workerId, isActive]
@@ -102,7 +136,6 @@ async function activateService(workerId, professionId, serviceId, isActive) {
     return result.rows[0];
   }
 
-  // insert new row
   const prof = await pool.query('SELECT id FROM professions WHERE id = $1', [professionId]);
   if (prof.rows.length === 0) throw new Error('Profession not found');
 
@@ -123,17 +156,8 @@ async function deleteWorkerService(workerId, serviceId) {
 }
 
 async function getPublicWorkerServices(workerId) {
-  // 1. Fetch all worker professions (even those without services yet)
-  const profsResult = await pool.query(
-    `SELECT p.id, p.name, p.icon
-     FROM worker_professions wp
-     JOIN professions p ON p.id = wp.profession_id
-     WHERE wp.worker_id = $1 AND p.is_active = true`,
-    [workerId]
-  );
-  const professions = profsResult.rows;
+  const professions = await resolveProfessions(workerId);
 
-  // 2. For each profession, fetch its active services
   for (const prof of professions) {
     const svcResult = await pool.query(
       `SELECT
