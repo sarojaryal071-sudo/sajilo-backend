@@ -10,4 +10,7 @@ router.put('/workers/:id/reject', authGuard, roleGuard('admin'), adminController
 router.get('/stats', authGuard, roleGuard('admin'), adminController.getStats)
 router.get('/customers', authGuard, roleGuard('admin'), adminController.getCustomers)
 
+// Analytics
+router.use('/analytics', authGuard, roleGuard('admin'), require('./admin.analytics.routes'))
+
 module.exports = router
