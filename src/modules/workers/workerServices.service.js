@@ -26,26 +26,31 @@ async function resolveProfessions(workerId) {
   const user = userResult.rows[0];
   if (!user) return [];
 
-  // Build a list of profession names: primary first, then secondaries
+  // Build a deduplicated list of profession names from sign‑up
   const names = [];
-  if (user.primary_skill) names.push(user.primary_skill.trim().toLowerCase());
+  if (user.primary_skill) names.push(user.primary_skill.trim());
   if (Array.isArray(user.secondary_roles)) {
     user.secondary_roles.forEach(r => {
-      if (r) names.push(String(r).trim().toLowerCase());
+      if (r) names.push(String(r).trim());
     });
   }
-
   if (names.length === 0) return [];
 
-  // Match against the professions table (slug or name, case‑insensitive)
-  const result = await pool.query(
-    `SELECT id, name, icon FROM professions
-     WHERE is_active = true
-       AND (LOWER(slug) = ANY($1::text[]) OR LOWER(name) = ANY($1::text[]))
-     ORDER BY sort_order, id`,
-    [names]
-  );
-  return result.rows;
+  // Ensure each name exists in the professions table (upsert)
+  const resultRows = [];
+  for (const name of names) {
+    const slug = name.toLowerCase().replace(/\s+/g, '-');
+    const res = await pool.query(
+      `INSERT INTO professions (slug, name)
+       VALUES ($1, $2)
+       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+       RETURNING id, name, icon`,
+      [slug, name]
+    );
+    resultRows.push(res.rows[0]);
+  }
+
+  return resultRows;
 }
 
 /**
