@@ -76,7 +76,8 @@ async function getWorkerServices(workerId) {
          ws.is_active,
          ws.id AS worker_service_id,
          false AS is_custom,
-         ws.custom_label
+         ws.custom_label,
+         ws.custom_label_np
        FROM profession_services ps
        LEFT JOIN worker_services ws
          ON ws.service_id = ps.id AND ws.worker_id = $1
@@ -91,7 +92,8 @@ async function getWorkerServices(workerId) {
          ws.is_active,
          ws.id AS worker_service_id,
          true AS is_custom,
-         ws.custom_label
+         ws.custom_label,
+         ws.custom_label_np
        FROM worker_services ws
        WHERE ws.worker_id = $1 AND ws.profession_id = $2 AND ws.service_id IS NULL`,
       [workerId, prof.id]
@@ -120,12 +122,12 @@ async function updateWorkerService(workerId, serviceId, { price, is_active }) {
 /**
  * Create a custom service for a worker (no admin-defined service_id).
  */
-async function createCustomService(workerId, { profession_id, custom_label, price }) {
+async function createCustomService(workerId, { profession_id, custom_label, price, custom_label_np }) {
   const result = await pool.query(
-    `INSERT INTO worker_services (worker_id, profession_id, service_id, custom_label, price, is_active)
-     VALUES ($1, $2, NULL, $3, $4, true)
+    `INSERT INTO worker_services (worker_id, profession_id, service_id, custom_label, custom_label_np, price, is_active)
+     VALUES ($1, $2, NULL, $3, $4, $5, true)
      RETURNING *`,
-    [workerId, profession_id, custom_label, price || 0]
+    [workerId, profession_id, custom_label, custom_label_np || null, price || 0]
   );
   return result.rows[0];
 }
@@ -178,7 +180,8 @@ async function getPublicWorkerServices(workerId) {
          ws.price AS worker_price,
          ws.is_active,
          false AS is_custom,
-         NULL AS custom_label
+         NULL AS custom_label,
+         NULL AS custom_label_np
        FROM worker_services ws
        JOIN profession_services ps ON ps.id = ws.service_id
        WHERE ws.worker_id = $1 AND ws.profession_id = $2 AND ws.is_active = true AND ps.is_active = true
@@ -190,7 +193,8 @@ async function getPublicWorkerServices(workerId) {
          ws.price AS worker_price,
          ws.is_active,
          true AS is_custom,
-         ws.custom_label
+         ws.custom_label,
+         ws.custom_label_np
        FROM worker_services ws
        WHERE ws.worker_id = $1 AND ws.profession_id = $2 AND ws.is_active = true AND ws.service_id IS NULL`,
       [workerId, prof.id]
