@@ -18,7 +18,11 @@ router.put('/me/services/:id', authGuard, roleGuard('worker'), workerServicesCon
 router.post('/me/services/custom', authGuard, roleGuard('worker'), workerServicesController.createCustom)
 router.post('/me/services/activate', authGuard, roleGuard('worker'), workerServicesController.activateService)
 router.delete('/me/services/:id', authGuard, roleGuard('worker'), workerServicesController.deleteService)
+router.get('/me/job-size-ranges', authGuard, roleGuard('worker'), workerServicesController.getJobSizeRanges)
+router.put('/me/job-size-ranges', authGuard, roleGuard('worker'), workerServicesController.saveJobSizeRanges)
 router.get('/:workerId/services', workerServicesController.getPublicServices)
+router.get('/:workerId/job-size-ranges', workerServicesController.getPublicJobSizeRanges)
+
 
 // Protected: get worker detail (must be last to avoid shadowing other routes)
 router.get('/:id', authGuard, workerController.getWorker)

@@ -124,7 +124,7 @@ async function updateWorkerService(workerId, serviceId, { price, is_active }) {
  */
 async function createCustomService(workerId, { profession_id, custom_label, price, custom_label_np }) {
   console.log('🛠 createCustomService params:', { workerId, profession_id, custom_label, custom_label_np, price });
-  
+
   const result = await pool.query(
     `INSERT INTO worker_services (worker_id, profession_id, service_id, custom_label, custom_label_np, price, is_active)
      VALUES ($1, $2, NULL, $3, $4, $5, true)
@@ -207,6 +207,78 @@ async function getPublicWorkerServices(workerId) {
   return professions;
 }
 
+async function getJobSizeRanges(workerId) {
+  // Fetch all rows for this worker: fallback row (profession_id IS NULL) + overrides
+  const result = await pool.query(
+    `SELECT profession_id, small_max_price, medium_max_price
+     FROM worker_job_size_ranges
+     WHERE worker_id = $1`,
+    [workerId]
+  );
+
+  const rows = result.rows;
+  let defaultRanges = null;
+  const professionRanges = {};
+
+  for (const row of rows) {
+    const range = {
+      small_max_price: parseFloat(row.small_max_price),
+      medium_max_price: parseFloat(row.medium_max_price),
+    };
+    if (row.profession_id === null) {
+      defaultRanges = range;
+    } else {
+      professionRanges[row.profession_id] = range;
+    }
+  }
+
+  // If no worker‑wide fallback exists, use system defaults
+  if (!defaultRanges) {
+    defaultRanges = { small_max_price: 1000, medium_max_price: 3000 };
+  }
+
+  return {
+    default_ranges: defaultRanges,
+    profession_ranges: professionRanges,
+  };
+}
+
+async function saveJobSizeRanges(workerId, { profession_id, small_max_price, medium_max_price }) {
+  // Validate
+  const small = parseFloat(small_max_price);
+  const medium = parseFloat(medium_max_price);
+  if (isNaN(small) || isNaN(medium) || small <= 0 || medium <= 0 || small >= medium) {
+    throw new Error('Invalid ranges: small must be > 0, medium > 0, and small < medium');
+  }
+
+  // profession_id can be null / undefined → worker-wide fallback
+  const profId = profession_id ? parseInt(profession_id, 10) : null;
+
+  // Check if a row already exists for this (worker, profession) combination
+  const existing = await pool.query(
+    `SELECT id FROM worker_job_size_ranges
+     WHERE worker_id = $1 AND profession_id IS NOT DISTINCT FROM $2`,
+    [workerId, profId]
+  );
+
+  if (existing.rows.length > 0) {
+    await pool.query(
+      `UPDATE worker_job_size_ranges
+       SET small_max_price = $1, medium_max_price = $2, updated_at = NOW()
+       WHERE id = $3`,
+      [small, medium, existing.rows[0].id]
+    );
+  } else {
+    await pool.query(
+      `INSERT INTO worker_job_size_ranges (worker_id, profession_id, small_max_price, medium_max_price)
+       VALUES ($1, $2, $3, $4)`,
+      [workerId, profId, small, medium]
+    );
+  }
+
+  return { profession_id: profId, small_max_price: small, medium_max_price: medium };
+}
+
 module.exports = {
   getWorkerServices,
   updateWorkerService,
@@ -214,4 +286,6 @@ module.exports = {
   activateService,
   deleteWorkerService,
   getPublicWorkerServices,
+  getJobSizeRanges,          // ← added
+  saveJobSizeRanges
 };
