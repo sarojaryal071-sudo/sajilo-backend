@@ -2,13 +2,13 @@ const express = require('express');
 const router = express.Router();
 const analyticsController = require('./admin.analytics.controller');
 const authGuard = require('../../middleware/auth.guard');
-const roleGuard = require('../../middleware/role.guard');
+const permissionGuard = require('../../middleware/permission.guard');
 
 // Single endpoint: get all analytics
 router.get(
   '/',
   authGuard,
-  roleGuard('admin'),
+  permissionGuard('view_analytics'),
   analyticsController.getAllAnalytics
 );
 

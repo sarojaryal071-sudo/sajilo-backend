@@ -26,6 +26,7 @@ const PAYMENT_STATUS_REGISTRY = {
   FAILED:         'failed',
 };
 
+
 // ── Notification Types ────────────────────────────────────────────
 const NOTIFICATION_TYPE_REGISTRY = {
   BOOKING_CREATED:   'booking_created',
@@ -39,6 +40,13 @@ const NOTIFICATION_TYPE_REGISTRY = {
   REVIEW_CREATED:    'review_created',
   SYSTEM_ANNOUNCEMENT: 'system_announcement',
   // Add future notification types here
+};
+
+// ── Moderation Statuses ──────────────────────────────────────────
+const MODERATION_STATUS_REGISTRY = {
+  ACTIVE:       'active',
+  SUSPENDED:    'suspended',
+  UNDER_REVIEW: 'under_review',
 };
 
 // ── Socket Event Names (standardised) ─────────────────────────────
@@ -72,5 +80,6 @@ module.exports = {
   BOOKING_STATUS_REGISTRY,
   PAYMENT_STATUS_REGISTRY,
   NOTIFICATION_TYPE_REGISTRY,
+  MODERATION_STATUS_REGISTRY,
   SOCKET_EVENT_REGISTRY,
 };

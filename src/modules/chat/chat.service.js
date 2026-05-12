@@ -1,15 +1,25 @@
 ﻿// Chat service — permission checks and message routing logic for customer, worker, and admin communication
 const chatModel = require('./chat.model')
 const authModel = require('../auth/auth.model')
+const { pool } = require('../../config/database')   // ← moved from inside canMessage to top
 
 // Checks if a sender is allowed to message a receiver based on roles and booking status
 async function canMessage(senderId, receiverId, bookingId) {
   const sender = await authModel.findById(senderId)
   const receiver = await authModel.findById(receiverId)
 
-    console.log('[SERVICE] sender role:', sender?.role, 'receiver role:', receiver?.role)
+  console.log('[SERVICE] sender role:', sender?.role, 'receiver role:', receiver?.role)
 
   if (!sender || !receiver) return false
+
+  // ── Block suspended users from sending messages ──
+  const senderStatus = await pool.query(
+    `SELECT moderation_status FROM users WHERE id = $1`,
+    [senderId]
+  );
+  if (senderStatus.rows[0]?.moderation_status === 'suspended') {
+    return false;
+  }
 
   // Admin can message anyone — support channel
   if (sender.role === 'admin' || receiver.role === 'admin') return true
@@ -20,7 +30,6 @@ async function canMessage(senderId, receiverId, bookingId) {
   // Customer and worker require an active booking in the allowed window
   if (!bookingId) return false
 
-  const { pool } = require('../../config/database')
   const result = await pool.query(
     `SELECT * FROM bookings WHERE id = $1 AND status IN ('accepted', 'onway')`,
     [bookingId]
@@ -33,7 +42,7 @@ async function sendMessage(senderId, receiverId, text, bookingId = null) {
   const allowed = await canMessage(senderId, receiverId, bookingId)
   if (!allowed) throw new Error('Not allowed to message this user')
 
-    console.log('[SERVICE] sendMessage called with:', { senderId, receiverId, text, bookingId })
+  console.log('[SERVICE] sendMessage called with:', { senderId, receiverId, text, bookingId })
 
   const sender = await authModel.findById(senderId)
   const receiver = await authModel.findById(receiverId)
@@ -54,10 +63,10 @@ async function sendMessage(senderId, receiverId, text, bookingId = null) {
   }
 
   const conversationType = chatModel.resolveConversationType(sender.role, receiver.role)
-const conversation = await chatModel.findOrCreateConversation(customerId, workerId, bookingId, conversationType)
-console.log('[SERVICE] conversation returned:', { id: conversation?.id, type: conversation?.conversation_type, customerId, workerId })
-console.log('[SERVICE] conversation.id used for save:', conversation?.id)
-return chatModel.saveMessage(conversation.id, senderId, receiverId, text)
+  const conversation = await chatModel.findOrCreateConversation(customerId, workerId, bookingId, conversationType)
+  console.log('[SERVICE] conversation returned:', { id: conversation?.id, type: conversation?.conversation_type, customerId, workerId })
+  console.log('[SERVICE] conversation.id used for save:', conversation?.id)
+  return chatModel.saveMessage(conversation.id, senderId, receiverId, text)
 }
 
 module.exports = { canMessage, sendMessage }

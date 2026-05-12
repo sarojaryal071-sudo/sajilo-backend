@@ -1,6 +1,7 @@
 // sajilo-backend/src/modules/payments/payments.service.js
 const paymentsModel = require('./payments.model');
 const { PAYMENT_STATUS_REGISTRY } = require('../../config/operationalRegistries');
+const activityService = require('../activity/activity.service');
 const auditService = require('../audit/audit.service');
 
 
@@ -50,6 +51,20 @@ async function confirmInvoiceWithEdits(bookingId, workerId, { discount_amount, e
     extra_items_json: extra,
     payment_method: payment_method || 'cash',
   });
+
+  // Log activity
+  try {
+    await activityService.logActivity({
+      type: 'payment',
+      action: 'created',
+      entityType: 'payment',
+      entityId: updated.id,
+      title: `Invoice for booking #${bookingId} generated`,
+      metadata: { booking_id: bookingId, worker_id: workerId, status: updated.status },
+      createdBy: workerId,
+    });
+  } catch (err) { console.error('Activity log failed (invoice generated):', err.message); }
+
   return updated;
 }
 
@@ -66,6 +81,21 @@ async function markPaymentPaid(bookingId, paidByRole, paidByUserId) {
   // Additional validations (method check, user authorization) are done by the caller.
 
   const updated = await paymentsModel.markPaid(bookingId, paidByRole, paidByUserId);
+
+  // Log activity
+  try {
+    await activityService.logActivity({
+      type: 'payment',
+      action: 'completed',
+      entityType: 'payment',
+      entityId: updated.id,
+      title: `Payment for booking #${bookingId} completed (by ${paidByRole})`,
+      metadata: { booking_id: bookingId, paid_by: paidByRole, paid_by_user: paidByUserId },
+      createdBy: paidByUserId,
+    });
+  } catch (err) { console.error('Activity log failed (payment completed):', err.message); }
+
+  return updated;
 
   // ── Audit log the status transition ──
   try {

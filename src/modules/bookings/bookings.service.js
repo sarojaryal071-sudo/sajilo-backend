@@ -6,6 +6,7 @@ const chatModel = require('../chat/chat.model')
 const notificationsService = require('../notification/notification.service')
 const { getUserRoom } = require('../../utils/socketRooms')
 const { BOOKING_STATUS_REGISTRY, NOTIFICATION_TYPE_REGISTRY, SOCKET_EVENT_REGISTRY } = require('../../config/operationalRegistries')
+const activityService = require('../activity/activity.service')
 
 // Standardized socket emitter
 async function emitBookingEvent(event, booking, extra = {}) {
@@ -48,6 +49,16 @@ async function emitBookingEvent(event, booking, extra = {}) {
 }
 
 async function createBooking({ customerId, workerId, serviceName, jobSize, selectedServices = [] }) {
+  // ── Block suspended customers from creating new bookings ──
+  const customerStatus = await pool.query(
+    `SELECT moderation_status FROM users WHERE id = $1`,
+    [customerId]
+  );
+  const custStatus = customerStatus.rows[0]?.moderation_status;
+  if (custStatus === 'suspended') {
+    throw new Error('Your account is suspended. You cannot create new bookings.');
+  }
+
   // Verify worker exists and is online
   const workerResult = await pool.query(
     `SELECT id, is_online FROM users WHERE id = $1 AND role = 'worker'`,
@@ -109,6 +120,19 @@ async function createBooking({ customerId, workerId, serviceName, jobSize, selec
 
   emitBookingEvent(SOCKET_EVENT_REGISTRY.BOOKING_CREATED, booking);
 
+  // Log activity
+  try {
+    await activityService.logActivity({
+      type: 'booking',
+      action: 'created',
+      entityType: 'booking',
+      entityId: booking.id,
+      title: `Booking #${booking.id} created`,
+      metadata: { customer_id: customerId, worker_id: workerId, service_name: computedServiceName },
+      createdBy: customerId,
+    });
+  } catch (err) { console.error('Activity log failed (booking.created):', err.message); }
+
   // Notify worker about new booking request
   try {
     await notificationsService.createNotification({
@@ -143,6 +167,16 @@ async function getWorkerBookings(workerId) {
 }
 
 async function acceptBooking(bookingId, workerId) {
+  // ── Block suspended workers from accepting ──
+  const workerStatus = await pool.query(
+    `SELECT moderation_status FROM users WHERE id = $1`,
+    [workerId]
+  );
+  const workerModStatus = workerStatus.rows[0]?.moderation_status;
+  if (workerModStatus === 'suspended') {
+    throw new Error('Your account is suspended. You cannot accept new bookings.');
+  }
+
   const booking = await bookingsModel.findById(bookingId)
   if (!booking) throw new Error('Booking not found')
   if (booking.worker_id !== workerId) throw new Error('Not your booking')
@@ -165,6 +199,19 @@ async function acceptBooking(bookingId, workerId) {
 
   emitBookingEvent(SOCKET_EVENT_REGISTRY.BOOKING_ACCEPTED, updated)
   emitBookingEvent(SOCKET_EVENT_REGISTRY.BOOKING_UPDATED, updated, { visible: false })
+
+  // Log activity
+  try {
+    await activityService.logActivity({
+      type: 'booking',
+      action: 'accepted',
+      entityType: 'booking',
+      entityId: booking.id,
+      title: `Booking #${booking.id} accepted by worker`,
+      metadata: { worker_id: workerId, customer_id: booking.customer_id },
+      createdBy: workerId,
+    });
+  } catch (err) { console.error('Activity log failed (booking.accepted):', err.message); }
 
   // Notify customer that booking was accepted
   try {
@@ -259,7 +306,7 @@ async function updateBookingStatus(bookingId, workerId, status) {
     } catch (err) {
       console.error('Failed to create payment record on complete:', err.message)
     }
-  }
+    }
 
   emitBookingEvent(
     status === BOOKING_STATUS_REGISTRY.ONWAY ? SOCKET_EVENT_REGISTRY.BOOKING_ONWAY :
@@ -268,6 +315,23 @@ async function updateBookingStatus(bookingId, workerId, status) {
     `booking.${status}`,
     updated
   )
+
+  // Log activity for completed bookings
+  if (status === BOOKING_STATUS_REGISTRY.COMPLETED) {
+    try {
+      await activityService.logActivity({
+        type: 'booking',
+        action: 'completed',
+        entityType: 'booking',
+        entityId: booking.id,
+        title: `Booking #${booking.id} completed`,
+        metadata: { worker_id: workerId, customer_id: booking.customer_id },
+        createdBy: workerId,
+      });
+    } catch (err) { console.error('Activity log failed (booking.completed):', err.message); }
+  }
+
+
 
   // Create a notification only for the completed state (review reminder)
   if (status === BOOKING_STATUS_REGISTRY.COMPLETED) {
@@ -317,6 +381,19 @@ async function cancelBooking(bookingId, userId, reason = null) {
   } catch (err) {
     console.error('Failed to record cancellation:', err.message)
   }
+
+  // Log activity
+  try {
+    await activityService.logActivity({
+      type: 'booking',
+      action: 'cancelled',
+      entityType: 'booking',
+      entityId: booking.id,
+      title: `Booking #${booking.id} cancelled by customer`,
+      metadata: { customer_id: userId, worker_id: booking.worker_id, reason },
+      createdBy: userId,
+    });
+  } catch (err) { console.error('Activity log failed (booking.cancelled):', err.message); }
 
   emitBookingEvent(SOCKET_EVENT_REGISTRY.BOOKING_UPDATED, updated, { previousStatus: booking.status })
 

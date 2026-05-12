@@ -53,10 +53,19 @@ app.use('/api/locations', require('./modules/locations/locations.routes'))
 app.use('/api/reviews', require('./modules/reviews/reviews.routes'))
 app.use('/api/notifications', require('./modules/notification/notification.routes'))
 app.use('/api/payments', require('./modules/payments/payments.routes'))
+app.use('/api/system', require('./modules/system/system.routes'));
+app.use('/health', require('./modules/system/health.routes'))
+app.use('/api/support/tickets', require('./modules/support/supportTickets.routes').userRouter)
+
 
 app.use(errorHandler)
 
 app.use('/api/admin/support', require('./modules/admin/support.routes'))
+app.use('/api/admin/support/tickets', require('./modules/support/supportTickets.routes').adminRouter)
+app.use('/api/admin/announcements', require('./modules/admin/announcements.routes').adminRouter)
+app.use('/api/admin/activity', require('./modules/activity/activity.routes'))
+app.use('/api/admin/search', require('./modules/admin/admin.search.routes'))
+app.use('/api/announcements', require('./modules/admin/announcements.routes').publicRouter)
 
 
 module.exports = app

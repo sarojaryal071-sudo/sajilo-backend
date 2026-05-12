@@ -62,17 +62,32 @@ async function confirmInvoice(req, res) {
     const workerId = req.user?.id;
     const { discount_amount, extra_items, payment_method } = req.body || {};
 
+    // ── Validation hardening (Phase 13A) ──
+    const numericBookingId = Number(bookingId);
+    if (!Number.isInteger(numericBookingId) || numericBookingId < 1) {
+      return res.status(400).json({ error: 'Invalid booking ID – must be a positive integer' });
+    }
     if (!workerId) {
       return res.status(401).json({ error: 'Authentication required' });
     }
+    if (discount_amount !== undefined && (typeof discount_amount !== 'number' || discount_amount < 0)) {
+      return res.status(400).json({ error: 'discount_amount must be a non‑negative number' });
+    }
+    if (extra_items !== undefined && !Array.isArray(extra_items)) {
+      return res.status(400).json({ error: 'extra_items must be an array' });
+    }
+    if (payment_method !== undefined && typeof payment_method !== 'string') {
+      return res.status(400).json({ error: 'payment_method must be a string' });
+    }
+    // ─────────────────────────────────────
 
-    const payment = await paymentsService.getPaymentByBookingId(Number(bookingId));
+    const payment = await paymentsService.getPaymentByBookingId(numericBookingId);
     if (!payment || payment.worker_id !== workerId) {
       return res.status(403).json({ error: 'You are not authorized to confirm this invoice' });
     }
 
     const updated = await paymentsService.confirmInvoiceWithEdits(
-      Number(bookingId),
+      numericBookingId,
       workerId,
       { discount_amount, extra_items, payment_method }
     );
@@ -88,7 +103,7 @@ async function confirmInvoice(req, res) {
         message: `Invoice for booking #${bookingId} is ready for payment`,
         entityType: 'payment',
         entityId: updated.id,
-        metadata: { booking_id: Number(bookingId), payment_id: updated.payment_id },
+        metadata: { booking_id: numericBookingId, payment_id: updated.payment_id },
       });
     } catch (err) {
       console.error('Notification creation failed (invoice_ready):', err);

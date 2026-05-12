@@ -1,3 +1,5 @@
+require('./src/utils/logger');
+
 const http = require('http')
 const app = require('./src/app')
 const { testConnection } = require('./src/config/database')

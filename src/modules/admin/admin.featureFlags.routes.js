@@ -3,13 +3,13 @@ const express = require('express');
 const router = express.Router();
 const featureFlagsController = require('./admin.featureFlags.controller');
 const authGuard = require('../../middleware/auth.guard');
-const roleGuard = require('../../middleware/role.guard');
+const permissionGuard = require('../../middleware/permission.guard');
 
 // GET /api/admin/feature-flags
 router.get(
   '/',
   authGuard,
-  roleGuard('admin'),
+  permissionGuard('manage_feature_flags'),
   featureFlagsController.getFeatureFlags
 );
 
@@ -17,7 +17,7 @@ router.get(
 router.put(
   '/:flagName',
   authGuard,
-  roleGuard('admin'),
+  permissionGuard('manage_feature_flags'),
   featureFlagsController.toggleFeatureFlag
 );
 

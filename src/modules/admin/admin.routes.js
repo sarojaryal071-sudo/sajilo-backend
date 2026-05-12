@@ -18,5 +18,6 @@ router.use('/professions', authGuard, roleGuard('admin'), require('./admin.profe
 // Feature Flags (Phase 12D)
 router.use('/feature-flags', authGuard, roleGuard('admin'), require('./admin.featureFlags.routes'))
 router.use('/live-operations', authGuard, roleGuard('admin'), require('./admin.liveOperations.routes'))
+router.use('/moderation', authGuard, roleGuard('admin'), require('./moderation.routes'))
 
 module.exports = router
