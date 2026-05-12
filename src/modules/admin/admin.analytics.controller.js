@@ -1,5 +1,7 @@
 // sajilo-backend/src/modules/admin/admin.analytics.controller.js
-const analyticsService = require('./admin.analytics.service');
+const bookingAnalytics = require('./bookingAnalytics.service');
+const paymentAnalytics = require('./paymentAnalytics.service');
+const workerAnalytics = require('./workerAnalytics.service');
 
 /**
  * GET /api/admin/analytics
@@ -22,19 +24,19 @@ async function getAllAnalytics(req, res) {
       bookingsTrend,
       revenueTrend,
     ] = await Promise.all([
-      analyticsService.getTotalRevenue(),
-      analyticsService.getPendingRevenue(),
-      analyticsService.getBookingCounts(),
-      analyticsService.getPaymentStatusBreakdown(),
-      analyticsService.getPaymentMethodDistribution(),
-      analyticsService.getAverageInvoiceValue(),
-      analyticsService.getTopEarningWorkers(),
-      analyticsService.getTopRatedWorkers(),
-      analyticsService.getCancellationStats(),
-      analyticsService.getRecentLowRatings(),
-      analyticsService.getWorkerActivityStats(),
-      analyticsService.getBookingsTrend(),
-      analyticsService.getRevenueTrend(),
+      paymentAnalytics.getTotalRevenue(),
+      paymentAnalytics.getPendingRevenue(),
+      bookingAnalytics.getBookingCounts(),
+      paymentAnalytics.getPaymentStatusBreakdown(),
+      paymentAnalytics.getPaymentMethodDistribution(),
+      paymentAnalytics.getAverageInvoiceValue(),
+      workerAnalytics.getTopEarningWorkers(),
+      workerAnalytics.getTopRatedWorkers(),
+      bookingAnalytics.getCancellationStats(),
+      workerAnalytics.getRecentLowRatings(),
+      workerAnalytics.getWorkerActivityStats(),
+      bookingAnalytics.getBookingsTrend(),
+      paymentAnalytics.getRevenueTrend(),
     ]);
 
     return res.json({

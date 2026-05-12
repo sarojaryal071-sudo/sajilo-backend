@@ -5,6 +5,7 @@ const { pool } = require('../../config/database')
 const chatModel = require('../chat/chat.model')
 const notificationsService = require('../notification/notification.service')
 const { getUserRoom } = require('../../utils/socketRooms')
+const { BOOKING_STATUS_REGISTRY, NOTIFICATION_TYPE_REGISTRY, SOCKET_EVENT_REGISTRY } = require('../../config/operationalRegistries')
 
 // Standardized socket emitter
 async function emitBookingEvent(event, booking, extra = {}) {
@@ -106,14 +107,14 @@ async function createBooking({ customerId, workerId, serviceName, jobSize, selec
     totalPrice,
   });
 
-  emitBookingEvent('booking.created', booking);
+  emitBookingEvent(SOCKET_EVENT_REGISTRY.BOOKING_CREATED, booking);
 
   // Notify worker about new booking request
   try {
     await notificationsService.createNotification({
       userId: booking.worker_id,
       userRole: 'worker',
-      type: 'booking_created',
+      type: NOTIFICATION_TYPE_REGISTRY.BOOKING_CREATED,
       title: 'New booking request',
       message: `New booking #${booking.id} from client`,
       entityType: 'booking',
@@ -145,9 +146,9 @@ async function acceptBooking(bookingId, workerId) {
   const booking = await bookingsModel.findById(bookingId)
   if (!booking) throw new Error('Booking not found')
   if (booking.worker_id !== workerId) throw new Error('Not your booking')
-  if (booking.status !== 'pending') throw new Error('Can only accept pending bookings')
+  if (booking.status !== BOOKING_STATUS_REGISTRY.PENDING) throw new Error('Can only accept pending bookings')
   
-  const updated = await bookingsModel.updateStatus(bookingId, 'accepted')
+  const updated = await bookingsModel.updateStatus(bookingId, BOOKING_STATUS_REGISTRY.ACCEPTED)
 
   // ✅ Auto‑create customer‑worker conversation
   try {
@@ -162,15 +163,15 @@ async function acceptBooking(bookingId, workerId) {
     // Don’t block the acceptance
   }
 
-  emitBookingEvent('booking.accepted', updated)
-  emitBookingEvent('booking.visibility.updated', updated, { visible: false })
+  emitBookingEvent(SOCKET_EVENT_REGISTRY.BOOKING_ACCEPTED, updated)
+  emitBookingEvent(SOCKET_EVENT_REGISTRY.BOOKING_UPDATED, updated, { visible: false })
 
   // Notify customer that booking was accepted
   try {
     await notificationsService.createNotification({
       userId: booking.customer_id,
       userRole: 'customer',
-      type: 'booking_accepted',
+      type: NOTIFICATION_TYPE_REGISTRY.BOOKING_ACCEPTED,
       title: 'Worker accepted your booking',
       message: `Booking #${booking.id} has been accepted`,
       entityType: 'booking',
@@ -189,17 +190,17 @@ async function rejectBooking(bookingId, workerId) {
   if (!booking) throw new Error('Booking not found')
   if (booking.worker_id !== workerId) throw new Error('Not your booking')
   
-  const updated = await bookingsModel.updateStatus(bookingId, 'rejected')
+  const updated = await bookingsModel.updateStatus(bookingId, BOOKING_STATUS_REGISTRY.REJECTED)
   
-  emitBookingEvent('booking.rejected', updated)
-  emitBookingEvent('booking.visibility.updated', updated, { visible: true })
+  emitBookingEvent(SOCKET_EVENT_REGISTRY.BOOKING_REJECTED, updated)
+  emitBookingEvent(SOCKET_EVENT_REGISTRY.BOOKING_UPDATED, updated, { visible: true })
 
   // Notify customer that booking was rejected
   try {
     await notificationsService.createNotification({
       userId: booking.customer_id,
       userRole: 'customer',
-      type: 'booking_rejected',
+      type: NOTIFICATION_TYPE_REGISTRY.BOOKING_REJECTED,
       title: 'Worker rejected your booking',
       message: `Booking #${booking.id} was rejected`,
       entityType: 'booking',
@@ -219,7 +220,7 @@ async function updateBookingStatus(bookingId, workerId, status) {
   if (booking.worker_id !== workerId) throw new Error('Not your booking')
 
   // ── Start‑Travel guards (only for 'onway') ──
-  if (status === 'onway') {
+  if (status === BOOKING_STATUS_REGISTRY.ONWAY) {
     // Single active job: worker cannot have another active job
     const activeJobs = await bookingsModel.findActiveByWorkerId(workerId)
     if (activeJobs.length > 0) {
@@ -230,7 +231,7 @@ async function updateBookingStatus(bookingId, workerId, status) {
   const updated = await bookingsModel.updateStatus(bookingId, status)
 
   // Auto‑update earnings on completion
-  if (status === 'completed') {
+  if (status === BOOKING_STATUS_REGISTRY.COMPLETED) {
     await pool.query(
       `UPDATE users 
        SET total_earnings = total_earnings + $1,
@@ -260,15 +261,21 @@ async function updateBookingStatus(bookingId, workerId, status) {
     }
   }
 
-  emitBookingEvent(`booking.${status}`, updated)
+  emitBookingEvent(
+    status === BOOKING_STATUS_REGISTRY.ONWAY ? SOCKET_EVENT_REGISTRY.BOOKING_ONWAY :
+    status === BOOKING_STATUS_REGISTRY.WORKING ? SOCKET_EVENT_REGISTRY.BOOKING_WORKING :
+    status === BOOKING_STATUS_REGISTRY.COMPLETED ? SOCKET_EVENT_REGISTRY.BOOKING_COMPLETED :
+    `booking.${status}`,
+    updated
+  )
 
   // Create a notification only for the completed state (review reminder)
-  if (status === 'completed') {
+  if (status === BOOKING_STATUS_REGISTRY.COMPLETED) {
     try {
       await notificationsService.createNotification({
         userId: booking.customer_id,
         userRole: 'customer',
-        type: 'booking_completed',
+        type: NOTIFICATION_TYPE_REGISTRY.BOOKING_COMPLETED,
         title: `Job completed`,
         message: `Booking #${booking.id} has been completed. How was your experience?`,
         entityType: 'booking',
@@ -289,11 +296,11 @@ async function cancelBooking(bookingId, userId, reason = null) {
   const booking = await bookingsModel.findById(bookingId)
   if (!booking) throw new Error('Booking not found')
   if (booking.customer_id !== userId) throw new Error('Not your booking')
-  if (!['pending', 'accepted', 'onway'].includes(booking.status)) {
+  if (![BOOKING_STATUS_REGISTRY.PENDING, BOOKING_STATUS_REGISTRY.ACCEPTED, BOOKING_STATUS_REGISTRY.ONWAY].includes(booking.status)) {
     throw new Error('Booking can only be cancelled while pending, accepted, or on the way')
   }
 
-  const updated = await bookingsModel.updateStatus(bookingId, 'cancelled')
+  const updated = await bookingsModel.updateStatus(bookingId, BOOKING_STATUS_REGISTRY.CANCELLED)
 
   // Record cancellation
   try {
@@ -311,14 +318,14 @@ async function cancelBooking(bookingId, userId, reason = null) {
     console.error('Failed to record cancellation:', err.message)
   }
 
-  emitBookingEvent('booking.updated', updated, { previousStatus: booking.status })
+  emitBookingEvent(SOCKET_EVENT_REGISTRY.BOOKING_UPDATED, updated, { previousStatus: booking.status })
 
   // Notify worker about the cancellation
   try {
     await notificationsService.createNotification({
       userId: booking.worker_id,
       userRole: 'worker',
-      type: 'booking_cancelled',
+      type: NOTIFICATION_TYPE_REGISTRY.BOOKING_CANCELLED,
       title: 'Booking cancelled by customer',
       message: `Booking #${booking.id} has been cancelled`,
       entityType: 'booking',

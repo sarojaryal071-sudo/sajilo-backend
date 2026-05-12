@@ -1,5 +1,8 @@
 // sajilo-backend/src/modules/payments/payments.service.js
 const paymentsModel = require('./payments.model');
+const { PAYMENT_STATUS_REGISTRY } = require('../../config/operationalRegistries');
+const auditService = require('../audit/audit.service');
+
 
 /**
  * Auto-create a payment row when a booking is completed.
@@ -21,7 +24,7 @@ async function ensurePaymentForCompletedBooking(booking) {
     worker_amount,
     total: subtotal,
     method: 'cash',
-    status: 'unpaid',
+    status: PAYMENT_STATUS_REGISTRY.UNPAID,
     currency: booking.currency || 'NPR',
     invoice_number: null,
   });
@@ -35,7 +38,7 @@ async function confirmInvoiceWithEdits(bookingId, workerId, { discount_amount, e
   const payment = await paymentsModel.findByBookingId(bookingId);
   if (!payment) throw new Error('Payment record not found');
   if (payment.worker_id !== workerId) throw new Error('Not authorized to confirm this invoice');
-  if (payment.status !== 'unpaid') throw new Error('Invoice can only be confirmed when payment is unpaid');
+  if (payment.status !== PAYMENT_STATUS_REGISTRY.UNPAID) throw new Error('Invoice can only be confirmed when payment is unpaid');
 
   const extra = (extra_items || []).map(item => ({
     label: item.label || 'Extra charge',
@@ -57,12 +60,30 @@ async function confirmInvoiceWithEdits(bookingId, workerId, { discount_amount, e
 async function markPaymentPaid(bookingId, paidByRole, paidByUserId) {
   const payment = await paymentsModel.findByBookingId(bookingId);
   if (!payment) throw new Error('Payment record not found');
-  if (payment.status !== 'pending_cash') {
+  if (payment.status !== PAYMENT_STATUS_REGISTRY.PENDING_CASH) {
     throw new Error('Payment can only be made when invoice is pending cash confirmation');
   }
   // Additional validations (method check, user authorization) are done by the caller.
 
-  return paymentsModel.markPaid(bookingId, paidByRole, paidByUserId);
+  const updated = await paymentsModel.markPaid(bookingId, paidByRole, paidByUserId);
+
+  // ── Audit log the status transition ──
+  try {
+    await auditService.logAction({
+      actorId: paidByUserId,
+      actorRole: paidByRole,
+      action: 'payment.status_change',
+      entityType: 'payment',
+      entityId: payment.id,                     // from the earlier find
+      oldValue: { status: payment.status },
+      newValue: { status: PAYMENT_STATUS_REGISTRY.PAID },
+      metadata: { booking_id: bookingId },
+    });
+  } catch (auditErr) {
+    console.error('Audit log write failed (non‑blocking):', auditErr.message);
+  }
+
+  return updated;
 }
 
 /**

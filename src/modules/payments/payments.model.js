@@ -1,5 +1,6 @@
 // sajilo-backend/src/modules/payments/payments.model.js
 const { pool } = require('../../config/database');
+const { PAYMENT_STATUS_REGISTRY } = require('../../config/operationalRegistries');
 
 /**
  * Create a new payment record.
@@ -11,7 +12,7 @@ async function create(paymentData) {
     method = 'cash',
     currency = 'NPR',
     invoice_number = null,
-    status = 'unpaid'
+    status = PAYMENT_STATUS_REGISTRY.UNPAID
   } = paymentData;
 
   const result = await pool.query(
@@ -109,7 +110,7 @@ async function confirmInvoice(bookingId, { discount_amount, extra_items_json, pa
          extra_items_json = $2::jsonb,
          final_total = $3,
          method = $4,
-         status = 'pending_cash',
+         status = '${PAYMENT_STATUS_REGISTRY.PENDING_CASH}',
          invoice_confirmed_at = NOW(),
          updated_at = NOW()
      WHERE booking_id = $5
@@ -128,7 +129,7 @@ async function confirmInvoice(bookingId, { discount_amount, extra_items_json, pa
 async function markPaid(bookingId, paidByRole, paidByUserId) {
   const result = await pool.query(
     `UPDATE payments 
-     SET status = 'paid',
+     SET status = '${PAYMENT_STATUS_REGISTRY.PAID}',
          paid_at = NOW(),
          paid_by_role = $1,
          paid_by_user = $2,
