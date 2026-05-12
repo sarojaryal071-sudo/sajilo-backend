@@ -27,10 +27,11 @@ async function updateService(req, res) {
 
 async function createCustom(req, res) {
   try {
+    console.log('🔧 createCustom body:', req.body);
     const workerId = req.user.id;
-    const { profession_id, custom_label, price } = req.body;
+        const { profession_id, custom_label, custom_label_np, price } = req.body;
     if (!profession_id || !custom_label) return res.status(400).json({ error: 'profession_id and custom_label are required' });
-    const service = await workerServicesService.createCustomService(workerId, { profession_id, custom_label, price });
+    const service = await workerServicesService.createCustomService(workerId, { profession_id, custom_label, custom_label_np, price });
     return res.status(201).json({ success: true, data: service });
   } catch (err) {
     console.error('createCustom error:', err);

@@ -123,6 +123,8 @@ async function updateWorkerService(workerId, serviceId, { price, is_active }) {
  * Create a custom service for a worker (no admin-defined service_id).
  */
 async function createCustomService(workerId, { profession_id, custom_label, price, custom_label_np }) {
+  console.log('🛠 createCustomService params:', { workerId, profession_id, custom_label, custom_label_np, price });
+  
   const result = await pool.query(
     `INSERT INTO worker_services (worker_id, profession_id, service_id, custom_label, custom_label_np, price, is_active)
      VALUES ($1, $2, NULL, $3, $4, $5, true)
