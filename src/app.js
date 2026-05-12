@@ -65,6 +65,8 @@ app.use('/api/admin/support/tickets', require('./modules/support/supportTickets.
 app.use('/api/admin/announcements', require('./modules/admin/announcements.routes').adminRouter)
 app.use('/api/admin/activity', require('./modules/activity/activity.routes'))
 app.use('/api/admin/search', require('./modules/admin/admin.search.routes'))
+app.use('/api/admin/staff', require('./modules/admin/admin.staff.routes'))
+app.use('/api/admin/policies', require('./modules/admin/policy.routes'))
 app.use('/api/announcements', require('./modules/admin/announcements.routes').publicRouter)
 
 

@@ -65,6 +65,7 @@ async function getProfile(userId) {
 
   if (user.role === 'worker') {
     user.application_submitted = await authModel.hasWorkerApplication(userId)
+    user.welcomed = !!user.welcomed   // ensure it's a boolean
   }
   return user
 }

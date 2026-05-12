@@ -2,16 +2,18 @@
 // Phase 13B – Role & Permission Engine
 
 const PERMISSIONS = {
-  MANAGE_WORKERS:       'manage_workers',       // view, approve, suspend workers
-  MANAGE_CUSTOMERS:     'manage_customers',     // view, suspend customers
-  MANAGE_BOOKINGS:      'manage_bookings',      // view, cancel bookings
-  MANAGE_PAYMENTS:      'manage_payments',      // view, refund payments
-  MANAGE_SERVICES:      'manage_services',      // profession/service catalogue
-  MANAGE_ANNOUNCEMENTS: 'manage_announcements', // create/edit announcements
-  MANAGE_TICKETS:       'manage_tickets',       // assign, resolve support tickets
-  MANAGE_FEATURE_FLAGS: 'manage_feature_flags', // toggle platform features
-  VIEW_ANALYTICS:       'view_analytics',       // access analytics dashboard
-  VIEW_AUDIT_LOGS:      'view_audit_logs',      // access audit log
+  MANAGE_WORKERS:       'manage_workers',
+  MANAGE_CUSTOMERS:     'manage_customers',
+  MANAGE_BOOKINGS:      'manage_bookings',
+  MANAGE_PAYMENTS:      'manage_payments',
+  MANAGE_SERVICES:      'manage_services',
+  MANAGE_ANNOUNCEMENTS: 'manage_announcements',
+  MANAGE_TICKETS:       'manage_tickets',
+  MANAGE_FEATURE_FLAGS: 'manage_feature_flags',
+  MANAGE_STAFF:         'manage_staff',
+  MANAGE_POLICIES:      'manage_policies',          // create, edit, deactivate staff accounts
+  VIEW_ANALYTICS:       'view_analytics',
+  VIEW_AUDIT_LOGS:      'view_audit_logs',
 };
 
 // Role‑to‑permission mapping (can be extended with DB later)

@@ -30,16 +30,25 @@ async function createReview(bookingId, customerId, rating, reviewText = null) {
      RETURNING *`,
     [bookingId, customerId, booking.worker_id, rating, reviewText || null]
   )
-  // Emit socket event for live updates
+  // Emit socket event for live updates (include prefixed client IDs)
   try {
     const io = getIO()
     if (io) {
       const review = result.rows[0]
+
+      // Look up client_id for both parties (matching existing booking pattern)
+      const [customer, worker] = await Promise.all([
+        pool.query(`SELECT client_id FROM users WHERE id = $1`, [review.customer_id]),
+        pool.query(`SELECT client_id FROM users WHERE id = $1`, [review.worker_id]),
+      ])
+
       io.emit('review.created', {
         reviewId: review.id,
         bookingId: review.booking_id,
         workerId: review.worker_id,
+        workerClientId: worker.rows[0]?.client_id || `W${review.worker_id}`,
         customerId: review.customer_id,
+        customerClientId: customer.rows[0]?.client_id || `C${review.customer_id}`,
         rating: review.rating,
         reviewText: review.review_text,
         createdAt: review.created_at,

@@ -13,6 +13,13 @@ const FLAGS = {
 
   // ── Subscriptions ────────────────────────────────
   SUBSCRIPTIONS_ENABLED:   false,   // recurring plans for clients
+
+  // ── Beta Rollout Controls (Phase 13C – Module 3) ─
+  MAINTENANCE_MODE:        false,   // blocks all non‑admin actions
+  INVITE_ONLY_SIGNUP:      false,   // only invited users can register
+  REGISTRATION_FREEZE:     false,   // no new signups at all
+  WORKER_CAP_ENABLED:      false,   // limit total workers (see policy)
+  BETA_BANNER:             false,   // show a "beta" notice in the UI
 };
 
 /**
