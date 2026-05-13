@@ -3,12 +3,16 @@ import { useNavigate } from 'react-router-dom'
 import fieldRegistry from '../../config/fieldRegistry.js'
 import { useStyle } from '../../hooks/useStyle.js'
 import { useContent } from '../../hooks/useContent.js'
+import VerificationUploadOverlay from '../../components/verification/VerificationUploadOverlay.jsx'
+import useVerificationStatus from '../../hooks/useVerificationStatus.js'
 
 export default function WorkerApply() {
   const navigate = useNavigate()
   const CARDS = Array.isArray(fieldRegistry.workerApplyCards) ? fieldRegistry.workerApplyCards : []
   const [currentCardIndex, setCurrentCardIndex] = useState(0)
   const [formData, setFormData] = useState({})
+  const [showVerificationUpload, setShowVerificationUpload] = useState(false)
+  const { isSubmitted: verificationSubmitted } = useVerificationStatus()
 
   const currentCard = CARDS[currentCardIndex] || { titleKey: '', fields: [] }
   const cardTitle = useContent(currentCard.titleKey) || 'Worker Application'
@@ -107,6 +111,38 @@ export default function WorkerApply() {
             })}
           </div>
 
+          {/* ── Verification Documents Section (Phase 17) ── */}
+          <div style={{
+            marginTop: 20, padding: 16,
+            border: '2px dashed var(--border)',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--bg-surface2)',
+          }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>
+              📄 Identity Verification
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
+              Upload your government ID and a selfie to get verified. This builds trust with clients.
+            </div>
+            <button
+              onClick={() => setShowVerificationUpload(true)}
+              style={{
+                width: '100%', padding: 12, borderRadius: 'var(--radius-md)',
+                border: 'none',
+                background: verificationSubmitted ? '#DCFCE7' : 'var(--accent-blue)',
+                color: verificationSubmitted ? '#059669' : '#fff',
+                fontSize: 14, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              {verificationSubmitted ? '✅ Documents Uploaded — Tap to Update' : '📄 Upload Documents'}
+            </button>
+            {verificationSubmitted && (
+              <div style={{ fontSize: 11, color: '#059669', textAlign: 'center', marginTop: 6 }}>
+                Your documents have been submitted for review
+              </div>
+            )}
+          </div>
+
           <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
             {currentCardIndex > 0 && (
               <button type="button" onClick={handlePrev}
@@ -127,6 +163,14 @@ export default function WorkerApply() {
           </span>
         </div>
       </div>
+
+      {/* ── Verification Upload Overlay (Phase 17) ── */}
+      {showVerificationUpload && (
+        <VerificationUploadOverlay
+          onClose={() => setShowVerificationUpload(false)}
+          onSuccess={() => setShowVerificationUpload(false)}
+        />
+      )}
     </div>
   )
 }

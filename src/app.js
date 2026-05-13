@@ -72,6 +72,8 @@ app.use('/api/admin/deployment-status', require('./modules/admin/admin.deploymen
 app.use('/api/admin/simulate', require('./modules/admin/admin.simulate.routes'))
 app.use('/api/admin/automation', require('./modules/system/automation.routes'))
 app.use('/api/integrity', require('./modules/integrity/integrity.routes'))
+app.use('/api/verification', require('./modules/verification/verification.routes'))
+app.use('/api/verification/review', require('./modules/verification/verificationReview.routes'))
 app.use('/api/performance', require('./modules/performance/performance.routes'))
 app.use('/api/announcements', require('./modules/admin/announcements.routes').publicRouter)
 
