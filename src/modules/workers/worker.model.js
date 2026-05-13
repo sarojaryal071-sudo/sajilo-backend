@@ -28,7 +28,7 @@ async function findByClientId(clientId) {
   return result.rows[0] || null
 }
 
-async function searchWorkers({ service, location, minRating, limit = 20 }) {
+async function searchWorkers({ service, location, minRating, limit = 20, sortBy }) {
   const params = []
   let query = `
     SELECT 
@@ -67,7 +67,21 @@ async function searchWorkers({ service, location, minRating, limit = 20 }) {
 
   // Group and sort by average rating for better relevance
   query += ` GROUP BY u.id, wa.primary_role, wa.secondary_roles, wa.service_area`
-  query += ` ORDER BY average_rating DESC, u.completed_jobs DESC`
+  // Sort by requested criteria (config-driven, defaults to rating)
+  if (sortBy === 'trust_score') {
+    query += ` ORDER BY u.completed_jobs DESC, average_rating DESC`
+  } else if (sortBy === 'completion_rate') {
+    query += ` ORDER BY u.completed_jobs DESC, average_rating DESC`
+  } else if (sortBy === 'jobs') {
+    query += ` ORDER BY u.completed_jobs DESC, average_rating DESC`
+  } else {
+    // Sort by requested criteria, default to rating
+  if (sortBy === 'trust_score' || sortBy === 'jobs') {
+    query += ` ORDER BY u.completed_jobs DESC, average_rating DESC`
+  } else {
+    query += ` ORDER BY average_rating DESC, u.completed_jobs DESC`
+  }
+  }
   query += ` LIMIT $${params.length + 1}`
   params.push(limit)
 

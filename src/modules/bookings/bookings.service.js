@@ -7,6 +7,7 @@ const notificationsService = require('../notification/notification.service')
 const { getUserRoom } = require('../../utils/socketRooms')
 const { BOOKING_STATUS_REGISTRY, NOTIFICATION_TYPE_REGISTRY, SOCKET_EVENT_REGISTRY } = require('../../config/operationalRegistries')
 const activityService = require('../activity/activity.service')
+const { onBookingCompleted } = require('../../services/workflows/workflowOrchestrator.service')
 
 // Standardized socket emitter
 async function emitBookingEvent(event, booking, extra = {}) {
@@ -277,36 +278,7 @@ async function updateBookingStatus(bookingId, workerId, status) {
 
   const updated = await bookingsModel.updateStatus(bookingId, status)
 
-  // Auto‑update earnings on completion
-  if (status === BOOKING_STATUS_REGISTRY.COMPLETED) {
-    await pool.query(
-      `UPDATE users 
-       SET total_earnings = total_earnings + $1,
-           completed_jobs = completed_jobs + 1,
-           updated_at = NOW()
-       WHERE id = $2`,
-      [booking.price || 0, workerId]
-    )
-
-    // ✅ Auto‑delete customer‑worker conversation when the job is done
-    console.log(`🧹 Attempting to delete conversation for booking ${bookingId}`);
-    try {
-      const delResult = await pool.query(
-        `DELETE FROM conversations WHERE booking_id = $1 AND conversation_type = 'customer_worker'`,
-        [bookingId]
-      );
-      console.log(`🧹 Delete result: ${delResult.rowCount} row(s) deleted`);
-    } catch (err) {
-      console.error('Failed to delete conversation on complete:', err.message);
-    }
-
-    // ✅ Auto‑create payment record (idempotent)
-    try {
-      await paymentsService.ensurePaymentForCompletedBooking(updated)
-    } catch (err) {
-      console.error('Failed to create payment record on complete:', err.message)
-    }
-    }
+  
 
   emitBookingEvent(
     status === BOOKING_STATUS_REGISTRY.ONWAY ? SOCKET_EVENT_REGISTRY.BOOKING_ONWAY :
@@ -331,23 +303,12 @@ async function updateBookingStatus(bookingId, workerId, status) {
     } catch (err) { console.error('Activity log failed (booking.completed):', err.message); }
   }
 
-
-
-  // Create a notification only for the completed state (review reminder)
+    // Orchestrate all side‑effects when a booking is completed (Phase 13D)
   if (status === BOOKING_STATUS_REGISTRY.COMPLETED) {
     try {
-      await notificationsService.createNotification({
-        userId: booking.customer_id,
-        userRole: 'customer',
-        type: NOTIFICATION_TYPE_REGISTRY.BOOKING_COMPLETED,
-        title: `Job completed`,
-        message: `Booking #${booking.id} has been completed. How was your experience?`,
-        entityType: 'booking',
-        entityId: booking.id,
-        metadata: { booking_id: booking.id, status },
-      })
+      await onBookingCompleted(updated, workerId);
     } catch (err) {
-      console.error('Notification creation failed (completed):', err)
+      console.error('Workflow orchestrator failed (booking completed):', err.message);
     }
   }
 
