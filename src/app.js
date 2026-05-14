@@ -57,7 +57,8 @@ app.use('/api/payments', require('./modules/payments/payments.routes'))
 app.use('/api/system', require('./modules/system/system.routes'));
 app.use('/health', require('./modules/system/health.routes'))
 app.use('/api/support/tickets', require('./modules/support/supportTickets.routes').userRouter)
-
+app.use('/api/payment-channels', require('./modules/payments/paymentChannels.routes'))
+app.use('/api/ledger', require('./modules/financialLedger/ledger.routes'));
 
 app.use(errorHandler)
 
@@ -74,6 +75,7 @@ app.use('/api/admin/automation', require('./modules/system/automation.routes'))
 app.use('/api/integrity', require('./modules/integrity/integrity.routes'))
 app.use('/api/verification', require('./modules/verification/verification.routes'))
 app.use('/api/verification/review', require('./modules/verification/verificationReview.routes'))
+app.use('/api/ui-config', require('./modules/uiConfig/uiConfig.routes'))
 app.use('/api/performance', require('./modules/performance/performance.routes'))
 app.use('/api/announcements', require('./modules/admin/announcements.routes').publicRouter)
 

@@ -110,12 +110,21 @@ async function confirmInvoice(bookingId, { discount_amount, extra_items_json, pa
          extra_items_json = $2::jsonb,
          final_total = $3,
          method = $4,
-         status = '${PAYMENT_STATUS_REGISTRY.PENDING_CASH}',
+         status = $6,
          invoice_confirmed_at = NOW(),
          updated_at = NOW()
      WHERE booking_id = $5
      RETURNING *`,
-    [discount_amount, JSON.stringify(extra_items_json), final_total, payment_method || 'cash', bookingId]
+    [
+      discount_amount,
+      JSON.stringify(extra_items_json),
+      final_total,
+      payment_method || 'cash',
+      bookingId,
+      (payment_method === 'cash' || !payment_method)
+        ? PAYMENT_STATUS_REGISTRY.AWAITING_CASH_CONFIRMATION
+        : PAYMENT_STATUS_REGISTRY.AWAITING_DIGITAL_CONFIRMATION
+    ]
   );
   return result.rows[0];
 }

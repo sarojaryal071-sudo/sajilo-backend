@@ -20,7 +20,7 @@ async function getPendingRevenue() {
   const result = await pool.query(
     `SELECT COALESCE(SUM(final_total), 0) AS pending_revenue
      FROM payments
-     WHERE status IN ('pending_cash', 'unpaid')`
+     WHERE status IN ('pending_cash', 'unpaid', 'awaiting_cash_confirmation', 'awaiting_digital_confirmation')`
   );
   return parseFloat(result.rows[0].pending_revenue);
 }
@@ -83,7 +83,7 @@ async function getUnpaidInvoicesCount() {
   const result = await pool.query(
     `SELECT COUNT(*)::int AS count
      FROM payments
-     WHERE status IN ('pending_cash', 'unpaid')`
+     WHERE status IN ('pending_cash', 'unpaid', 'awaiting_cash_confirmation', 'awaiting_digital_confirmation')`
   );
   return result.rows[0].count;
 }

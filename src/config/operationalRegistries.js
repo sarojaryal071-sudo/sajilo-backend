@@ -19,7 +19,9 @@ const PAYMENT_STATUS_REGISTRY = {
   UNPAID:         'unpaid',          // Initial state after auto‑create
   INVOICE_SENT:   'invoice_sent',
   INVOICE_SEEN:   'invoice_seen',
-  PENDING_CASH:   'pending_cash',    // After worker confirms invoice
+  PENDING_CASH:               'pending_cash',                // Legacy — after worker confirms invoice
+  AWAITING_CASH_CONFIRMATION: 'awaiting_cash_confirmation',  // Cash invoice finalized
+  AWAITING_DIGITAL_CONFIRMATION: 'awaiting_digital_confirmation', // Digital invoice finalized
   PAID:           'paid',
   CASH_COLLECTED: 'cash_collected',
   REFUNDED:       'refunded',

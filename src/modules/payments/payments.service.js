@@ -65,6 +65,14 @@ async function confirmInvoiceWithEdits(bookingId, workerId, { discount_amount, e
     });
   } catch (err) { console.error('Activity log failed (invoice generated):', err.message); }
 
+  // ── Ledger: append invoice_finalized entry (non-blocking) ──
+  try {
+    const ledgerService = require('../financialLedger/ledger.service');
+    await ledgerService.createInvoiceFinalizedEntry(updated, workerId);
+  } catch (err) {
+    console.error('Ledger entry failed (invoice_finalized) – continuing:', err.message);
+  }
+
   return updated;
 }
 
@@ -75,8 +83,13 @@ async function confirmInvoiceWithEdits(bookingId, workerId, { discount_amount, e
 async function markPaymentPaid(bookingId, paidByRole, paidByUserId) {
   const payment = await paymentsModel.findByBookingId(bookingId);
   if (!payment) throw new Error('Payment record not found');
-  if (payment.status !== PAYMENT_STATUS_REGISTRY.PENDING_CASH) {
-    throw new Error('Payment can only be made when invoice is pending cash confirmation');
+  const allowedStatuses = [
+    PAYMENT_STATUS_REGISTRY.PENDING_CASH,
+    PAYMENT_STATUS_REGISTRY.AWAITING_CASH_CONFIRMATION,
+    PAYMENT_STATUS_REGISTRY.AWAITING_DIGITAL_CONFIRMATION,
+  ];
+  if (!allowedStatuses.includes(payment.status)) {
+    throw new Error('Payment can only be made when invoice is awaiting confirmation');
   }
   // Additional validations (method check, user authorization) are done by the caller.
 
@@ -141,7 +154,17 @@ async function markCashPaidByWorker(bookingId, workerId) {
     throw new Error('Worker can only confirm cash payments');
   }
 
-  return markPaymentPaid(bookingId, 'worker', workerId);
+  const updated = await markPaymentPaid(bookingId, 'worker', workerId);
+
+  // ── Ledger: append payment_confirmed entry (non-blocking) ──
+  try {
+    const ledgerService = require('../financialLedger/ledger.service');
+    await ledgerService.createPaymentConfirmedEntry(updated, 'worker', workerId);
+  } catch (err) {
+    console.error('Ledger entry failed (payment_confirmed) – continuing:', err.message);
+  }
+
+  return updated;
 }
 
 /**
