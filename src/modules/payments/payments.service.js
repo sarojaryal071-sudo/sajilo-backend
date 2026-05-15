@@ -167,6 +167,17 @@ async function markCashPaidByWorker(bookingId, workerId) {
   return updated;
 }
 
+
+async function confirmDigitalPayment(bookingId, workerId) {
+  const payment = await paymentsModel.findByBookingId(bookingId);
+  if (!payment) throw new Error('Payment record not found');
+  if (payment.worker_id !== workerId) throw new Error('Not authorized');
+  if (payment.status !== PAYMENT_STATUS_REGISTRY.AWAITING_DIGITAL_CONFIRMATION) {
+    throw new Error('Digital payment can only be confirmed when awaiting digital confirmation');
+  }
+  return markPaymentPaid(bookingId, 'worker', workerId);
+}
+
 /**
  * Get payment record for a booking.
  */
@@ -188,11 +199,23 @@ async function getCustomerPayments(customerId) {
   return paymentsModel.getByCustomerId(customerId);
 }
 
+async function initiateDigitalPayment(bookingId, customerId) {
+  const payment = await paymentsModel.findByBookingId(bookingId);
+  if (!payment) throw new Error('Payment record not found');
+  if (payment.customer_id !== customerId) throw new Error('Not authorized');
+  if (payment.status !== PAYMENT_STATUS_REGISTRY.UNPAID && payment.status !== PAYMENT_STATUS_REGISTRY.AWAITING_DIGITAL_CONFIRMATION) {
+    throw new Error('Payment cannot be initiated in current status');
+  }
+  return paymentsModel.updateStatus(bookingId, PAYMENT_STATUS_REGISTRY.AWAITING_DIGITAL_CONFIRMATION);
+}
+
 module.exports = {
   ensurePaymentForCompletedBooking,
   confirmInvoiceWithEdits,
   confirmCashPayment,
   markCashPaidByWorker,
+  confirmDigitalPayment,
+  initiateDigitalPayment,
   getPaymentByBookingId,
   getWorkerPayments,
   getCustomerPayments,

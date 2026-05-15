@@ -4,7 +4,7 @@ const paymentsController = require('./payments.controller');
 const authGuard = require('../../middleware/auth.guard');
 const roleGuard = require('../../middleware/role.guard');
 
-// Worker confirms invoice (unpaid → pending_cash)
+// Worker confirms invoice (unpaid → pending_cash / awaiting_*)
 router.put(
   '/booking/:bookingId/confirm-invoice',
   authGuard,
@@ -12,7 +12,15 @@ router.put(
   paymentsController.confirmInvoice
 );
 
-// Worker marks cash payment as received (pending_cash → paid)
+// Worker confirms digital payment receipt
+router.put(
+  '/booking/:bookingId/confirm-digital',
+  authGuard,
+  roleGuard('worker'),
+  paymentsController.confirmDigital
+);
+
+// Worker marks cash payment as received (awaiting_cash_confirmation → paid)
 router.put(
   '/booking/:bookingId/mark-cash-paid',
   authGuard,
@@ -20,7 +28,15 @@ router.put(
   paymentsController.markCashPaid
 );
 
-// Client confirms cash payment (pending_cash → paid)
+// Client initiates digital payment (unpaid → awaiting_digital_confirmation)
+router.put(
+  '/booking/:bookingId/initiate-digital',
+  authGuard,
+  roleGuard('customer'),
+  paymentsController.initiateDigitalPayment
+);
+
+// Client confirms cash payment (pending_cash / awaiting_cash_confirmation → paid)
 router.put(
   '/booking/:bookingId/confirm',
   authGuard,

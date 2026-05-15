@@ -174,6 +174,25 @@ async function getWorkerPayments(req, res) {
   }
 }
 
+async function confirmDigital(req, res) {
+  try {
+    const { bookingId } = req.params;
+    const workerId = req.user?.id;
+
+    if (!workerId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const updated = await paymentsService.confirmDigitalPayment(Number(bookingId), workerId);
+    await emitPaymentUpdated(updated);
+
+    return res.json({ payment: updated });
+  } catch (err) {
+    console.error('confirmDigital error:', err);
+    return res.status(400).json({ error: err.message || 'Failed to confirm digital payment' });
+  }
+}
+
 /**
  * PUT /api/payments/booking/:bookingId/mark-cash-paid
  * Worker marks cash payment as received (offline client).
@@ -228,6 +247,25 @@ async function getCustomerPayments(req, res) {
   }
 }
 
+async function initiateDigitalPayment(req, res) {
+  try {
+    const { bookingId } = req.params;
+    const customerId = req.user?.id;
+
+    if (!customerId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const updated = await paymentsService.initiateDigitalPayment(Number(bookingId), customerId);
+    await emitPaymentUpdated(updated);
+
+    return res.json({ payment: updated });
+  } catch (err) {
+    console.error('initiateDigitalPayment error:', err);
+    return res.status(400).json({ error: err.message || 'Failed to initiate digital payment' });
+  }
+}
+
 module.exports = {
   getByBooking,
   confirmInvoice,
@@ -235,4 +273,6 @@ module.exports = {
   markCashPaid,
   getWorkerPayments,
   getCustomerPayments,
+  confirmDigital,
+  initiateDigitalPayment,
 };
