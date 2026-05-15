@@ -60,7 +60,7 @@ async function resolveProfessions(workerId) {
 }
 
 /**
- * Get all services for a worker, grouped by profession.
+ * Get all services for a worker, grouped by profession (worker's own view).
  */
 async function getWorkerServices(workerId) {
   const professions = await resolveProfessions(workerId);
@@ -181,6 +181,7 @@ async function getPublicWorkerServices(workerId) {
          ps.label_np,
          ws.price AS worker_price,
          ws.is_active,
+         ws.id AS worker_service_id,
          false AS is_custom,
          NULL AS custom_label,
          NULL AS custom_label_np
@@ -194,6 +195,7 @@ async function getPublicWorkerServices(workerId) {
          NULL AS label_np,
          ws.price AS worker_price,
          ws.is_active,
+         ws.id AS worker_service_id,
          true AS is_custom,
          ws.custom_label,
          ws.custom_label_np
