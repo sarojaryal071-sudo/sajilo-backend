@@ -73,6 +73,25 @@ async function confirmInvoiceWithEdits(bookingId, workerId, { discount_amount, e
     console.error('Ledger entry failed (invoice_finalized) – continuing:', err.message);
   }
 
+    // ── Payment Timeline: invoice_finalized ──
+  try {
+    const { createPaymentEvent } = require('./paymentTimeline.service');
+    await createPaymentEvent({
+      bookingId,
+      paymentId: updated.id,
+      eventType: 'invoice_finalized',
+      performedByRole: 'worker',
+      performedById: workerId,
+      metadata: {
+        final_total: parseFloat(updated.final_total || updated.total || 0),
+        discount: parseFloat(updated.discount_amount || 0),
+        extra_charges: updated.extra_items_json || [],
+      },
+    });
+  } catch (err) {
+    console.error('[paymentTimeline] invoice_finalized hook failed:', err.message);
+  }
+
   return updated;
 }
 
@@ -80,7 +99,7 @@ async function confirmInvoiceWithEdits(bookingId, workerId, { discount_amount, e
  * Shared core: mark a payment as paid, recording who did it.
  * Allowed only from status = pending_cash.
  */
-async function markPaymentPaid(bookingId, paidByRole, paidByUserId) {
+async function markPaymentPaid(bookingId, paidByRole, paidByUserId, metadata = {}) {
   const payment = await paymentsModel.findByBookingId(bookingId);
   if (!payment) throw new Error('Payment record not found');
   const allowedStatuses = [
@@ -93,7 +112,7 @@ async function markPaymentPaid(bookingId, paidByRole, paidByUserId) {
   }
   // Additional validations (method check, user authorization) are done by the caller.
 
-  const updated = await paymentsModel.markPaid(bookingId, paidByRole, paidByUserId);
+  const updated = await paymentsModel.markPaid(bookingId, paidByRole, paidByUserId, metadata);
 
   // Log activity
   try {
@@ -111,9 +130,46 @@ async function markPaymentPaid(bookingId, paidByRole, paidByUserId) {
   // ── Ledger: append payment_confirmed entry (centralized for all paths) ──
   try {
     const ledgerService = require('../financialLedger/ledger.service');
-    await ledgerService.createPaymentConfirmedEntry(updated, paidByRole, paidByUserId);
+    const ledgerEntry = await ledgerService.createPaymentConfirmedEntry(updated, paidByRole, paidByUserId);
+
+    // ── Payment Timeline: ledger_recorded ──
+    try {
+      const { createPaymentEvent } = require('./paymentTimeline.service');
+      await createPaymentEvent({
+        bookingId,
+        paymentId: updated.id,
+        eventType: 'ledger_recorded',
+        performedByRole: 'system',
+        metadata: { ledger_entry_id: ledgerEntry?.id },
+      });
+    } catch (err) {
+      console.error('[paymentTimeline] ledger_recorded hook failed:', err.message);
+    }
   } catch (err) {
     console.error('Ledger entry failed (payment_confirmed) – continuing:', err.message);
+  }
+
+
+      // ── Payment Timeline: payment confirmation ──
+  try {
+    const { createPaymentEvent } = require('./paymentTimeline.service');
+    const eventType = updated.confirmation_source === 'client_digital'
+      ? 'digital_payment_confirmed'
+      : 'worker_cash_confirmed';
+    await createPaymentEvent({
+      bookingId,
+      paymentId: updated.id,
+      eventType,
+      performedByRole: paidByRole,
+      performedById: paidByUserId,
+      provider: updated.payment_provider || null,
+      metadata: {
+        confirmation_source: updated.confirmation_source,
+        payment_channel_id: updated.payment_channel_id || null,
+      },
+    });
+  } catch (err) {
+    console.error('[paymentTimeline] payment confirmation hook failed:', err.message);
   }
 
   return updated;
@@ -147,7 +203,10 @@ async function confirmCashPayment(bookingId, customerId) {
   if (payment.customer_id !== customerId) throw new Error('Not authorized to confirm this payment');
   // No method restriction for client; they can pay whatever method was selected.
 
-  return markPaymentPaid(bookingId, 'customer', customerId);
+  return markPaymentPaid(bookingId, 'customer', customerId, {
+    confirmationSource: 'client_cash',
+    confirmedBy: customerId,
+  });
 }
 
 /**
@@ -162,35 +221,51 @@ async function markCashPaidByWorker(bookingId, workerId) {
     throw new Error('Worker can only confirm cash payments');
   }
 
-  const updated = await markPaymentPaid(bookingId, 'worker', workerId);
+  const updated = await markPaymentPaid(bookingId, 'worker', workerId, {
+    confirmationSource: 'worker_cash',
+    confirmedBy: workerId,
+  });
 
   return updated;
 }
 
 
-async function confirmDigitalPayment(bookingId, workerId) {
+async function confirmDigitalPayment(bookingId, customerId, { payment_channel_id, provider }) {
   const payment = await paymentsModel.findByBookingId(bookingId);
-  console.log('DEBUG confirmDigitalPayment - payment:', JSON.stringify(payment, null, 2));
   if (!payment) throw new Error('Payment record not found');
-  if (payment.worker_id !== workerId) throw new Error('Not authorized');
-  
-  // Allow digital confirmation when a provider is set, regardless of exact status
-  if (!payment.payment_provider) {
-    throw new Error('No digital payment provider selected');
-  }
-  
-  const allowedStatuses = [
-    PAYMENT_STATUS_REGISTRY.PENDING_CASH,
-    PAYMENT_STATUS_REGISTRY.AWAITING_CASH_CONFIRMATION,
-    PAYMENT_STATUS_REGISTRY.AWAITING_DIGITAL_CONFIRMATION,
-  ];
-  if (!allowedStatuses.includes(payment.status)) {
-    throw new Error('Payment cannot be confirmed in current status');
-  }
+  if (payment.customer_id !== customerId) throw new Error('Not authorized');
 
-  return markPaymentPaid(bookingId, 'worker', workerId);
+  // Prevent re‑confirmation of already paid payments
+  if (payment.status === 'paid') throw new Error('Payment already confirmed');
+
+  // Record the selected provider and channel before marking paid
+  await pool.query(
+    `UPDATE payments SET payment_provider = $1, payment_channel_id = $2, method = 'digital', client_initiated_at = NOW() WHERE id = $3`,
+    [provider, payment_channel_id, payment.id]
+  );
+
+      // ── Payment Timeline: client_digital_intent ──
+    try {
+      const { createPaymentEvent } = require('./paymentTimeline.service');
+      await createPaymentEvent({
+        bookingId,
+        paymentId: payment.id,
+        eventType: 'client_digital_intent',
+        performedByRole: 'customer',
+        performedById: customerId,
+        provider: provider,
+        metadata: { payment_channel_id: payment_channel_id },
+      });
+    } catch (err) {
+      console.error('[paymentTimeline] client_digital_intent hook failed:', err.message);
+    }
+
+  // Proceed through the unified confirmation flow
+  return markPaymentPaid(bookingId, 'customer', customerId, {
+    confirmationSource: 'client_digital',
+    confirmedBy: customerId,
+  });
 }
-
 
 /**
  * Record that the client has initiated payment (intent only, no status change).

@@ -16,7 +16,7 @@ router.put(
 router.put(
   '/booking/:bookingId/confirm-digital',
   authGuard,
-  roleGuard('worker'),
+  roleGuard('customer'),
   paymentsController.confirmDigital
 );
 
@@ -74,5 +74,19 @@ router.post(
   paymentsController.initiateCashPayment
 );
 
+// Get payment timeline for a booking (read-only)
+router.get(
+  '/booking/:bookingId/timeline',
+  authGuard,
+  async (req, res, next) => {
+    try {
+      const { getBookingPaymentTimeline } = require('./paymentTimeline.service');
+      const events = await getBookingPaymentTimeline(Number(req.params.bookingId));
+      return res.json({ success: true, data: events });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 module.exports = router;

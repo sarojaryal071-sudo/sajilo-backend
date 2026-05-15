@@ -139,23 +139,34 @@ async function confirmInvoice(bookingId, { discount_amount, extra_items_json, pa
  * @param {string} paidByRole - 'worker' or 'customer'
  * @param {number} paidByUserId - the user ID who marked it paid
  */
-async function markPaid(bookingId, paidByRole, paidByUserId) {
+async function markPaid(bookingId, paidByRole, paidByUserId, metadata = {}) {
+  const { confirmationSource, confirmedBy } = metadata;
+  
   const result = await pool.query(
-        `UPDATE payments 
+    `UPDATE payments 
      SET status = '${PAYMENT_STATUS_REGISTRY.PAID}',
          paid_at = NOW(),
          paid_by_role = $1,
          paid_by_user = $2,
          payment_settlement_mode = $4,
          payment_settled_at = NOW(),
+         confirmation_source = COALESCE($5, confirmation_source),
+         confirmed_by = COALESCE($6, confirmed_by),
+         confirmed_at = CASE WHEN $5 IS NOT NULL THEN NOW() ELSE confirmed_at END,
          updated_at = NOW()
      WHERE booking_id = $3
      RETURNING *`,
-        [paidByRole, paidByUserId, bookingId, paidByRole === 'customer' ? 'client' : 'worker']
+    [
+      paidByRole,
+      paidByUserId,
+      bookingId,
+      paidByRole === 'customer' ? 'client' : 'worker',
+      confirmationSource || null,
+      confirmedBy || null,
+    ]
   );
   return result.rows[0] || null;
 }
-
 module.exports = {
   create,
   findByBookingId,

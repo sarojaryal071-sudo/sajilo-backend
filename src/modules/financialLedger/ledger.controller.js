@@ -1,6 +1,6 @@
 const ledgerService = require('./ledger.service');
-
 const financialAggregation = require('./financialAggregation.service');
+const paymentAnalytics = require('../admin/paymentAnalytics.service');
 
 async function getFinancialOverview(req, res, next) {
   try {
@@ -15,6 +15,7 @@ async function getWorkerDueList(req, res, next) {
     res.json({ success: true, data: list });
   } catch (err) { next(err); }
 }
+
 async function getOverview(req, res, next) {
   try {
     const overview = await ledgerService.getOverview();
@@ -50,7 +51,6 @@ async function recordSettlement(req, res, next) {
     if (!workerId || !amount) {
       return res.status(400).json({ success: false, message: 'workerId and amount are required' });
     }
-
     const entry = await ledgerService.createEntry({
       worker_id: workerId,
       event_type: 'settlement_recorded',
@@ -64,10 +64,42 @@ async function recordSettlement(req, res, next) {
       created_by_role: 'admin',
       created_by_user: req.user.id,
     });
-
     res.json({ success: true, data: entry, message: 'Settlement recorded' });
   } catch (err) { next(err); }
 }
 
+// ── New Payment Analytics Handlers ──
 
-module.exports = { getOverview, getWorkerCommission, getWorkerLedger, getFinancialOverview, getWorkerDueList, getTimeline, recordSettlement };
+async function getProviderBreakdown(req, res, next) {
+  try { res.json({ success: true, data: await paymentAnalytics.getProviderBreakdown() }); }
+  catch (err) { next(err); }
+}
+
+async function getOperationalMetrics(req, res, next) {
+  try { res.json({ success: true, data: await paymentAnalytics.getOperationalMetrics() }); }
+  catch (err) { next(err); }
+}
+
+async function getWorkerReliability(req, res, next) {
+  try { res.json({ success: true, data: await paymentAnalytics.getWorkerPaymentReliability() }); }
+  catch (err) { next(err); }
+}
+
+async function getSettlementSpeed(req, res, next) {
+  try { res.json({ success: true, data: await paymentAnalytics.getSettlementSpeed() }); }
+  catch (err) { next(err); }
+}
+
+module.exports = {
+  getOverview,
+  getWorkerCommission,
+  getWorkerLedger,
+  getFinancialOverview,
+  getWorkerDueList,
+  getTimeline,
+  recordSettlement,
+  getProviderBreakdown,
+  getOperationalMetrics,
+  getWorkerReliability,
+  getSettlementSpeed,
+};

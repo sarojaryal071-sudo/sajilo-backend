@@ -39,6 +39,7 @@ async function getPublicChannels(req, res, next) {
     const publicChannels = channels
       .filter(ch => ch.is_active)
       .map(ch => ({
+        id: ch.id,
         provider: ch.provider,
         qr_image_url: ch.qr_image_url || null,
         masked_account_number: maskAccountNumber(ch.account_number),

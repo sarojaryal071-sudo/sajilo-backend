@@ -75,6 +75,17 @@ class LedgerService {
    * Called after markCashPaid (and future digital confirmations).
    */
   async createPaymentConfirmedEntry(payment, confirmedByRole, confirmedByUser) {
+    const metadata = {
+      method: payment.method,
+      paid_at: payment.paid_at || new Date().toISOString(),
+      confirmed_by: confirmedByRole,
+    };
+
+    // Attach digital payment metadata when present
+    if (payment.payment_provider) metadata.provider = payment.payment_provider;
+    if (payment.payment_channel_id) metadata.payment_channel_id = payment.payment_channel_id;
+    if (payment.confirmation_source) metadata.confirmation_source = payment.confirmation_source;
+
     return this.createEntry({
       booking_id: payment.booking_id,
       payment_id: payment.id,
@@ -83,11 +94,7 @@ class LedgerService {
       event_type: 'payment_confirmed',
       amount: parseFloat(payment.final_total || payment.total || 0),
       currency: payment.currency || 'NPR',
-      metadata: {
-        method: payment.method,
-        paid_at: payment.paid_at || new Date().toISOString(),
-        confirmed_by: confirmedByRole,
-      },
+      metadata,
       created_by_role: confirmedByRole,
       created_by_user: confirmedByUser,
     });

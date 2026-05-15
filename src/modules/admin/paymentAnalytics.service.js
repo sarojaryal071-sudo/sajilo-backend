@@ -88,6 +88,71 @@ async function getUnpaidInvoicesCount() {
   return result.rows[0].count;
 }
 
+// ── Provider Breakdown ──
+async function getProviderBreakdown() {
+  const result = await pool.query(
+    `SELECT COALESCE(payment_provider, 'cash') AS provider, COUNT(*)::int AS count,
+            COALESCE(SUM(final_total), 0) AS total
+     FROM payments WHERE status = 'paid'
+     GROUP BY payment_provider`
+  );
+  return result.rows;
+}
+
+// ── Operational Metrics ──
+async function getOperationalMetrics() {
+  const now = new Date();
+  const [pending, overdue] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*)::int FROM payments
+       WHERE status IN ('pending_cash','awaiting_cash_confirmation','awaiting_digital_confirmation')`
+    ),
+    pool.query(
+      `SELECT COUNT(*)::int FROM payments
+       WHERE status IN ('pending_cash','awaiting_cash_confirmation','awaiting_digital_confirmation')
+         AND payment_due_at IS NOT NULL AND payment_due_at < $1`,
+      [now]
+    ),
+  ]);
+  return {
+    pendingConfirmations: pending.rows[0].count,
+    overdueConfirmations: overdue.rows[0].count,
+  };
+}
+
+// ── Worker Payment Reliability ──
+async function getWorkerPaymentReliability() {
+  const result = await pool.query(
+    `SELECT u.id, u.name, u.client_id,
+            COUNT(*) FILTER (WHERE p.status = 'paid')::int AS confirmed,
+            COUNT(*)::int AS total,
+            ROUND(AVG(EXTRACT(EPOCH FROM (p.paid_at - p.invoice_confirmed_at))/60)::numeric, 1) AS avg_confirmation_minutes
+     FROM users u
+     JOIN payments p ON p.worker_id = u.id
+     WHERE p.invoice_confirmed_at IS NOT NULL
+     GROUP BY u.id`
+  );
+  return result.rows.map(r => ({
+    ...r,
+    confirmationRate: r.total > 0 ? Math.round((r.confirmed / r.total) * 100) : 0,
+  }));
+}
+
+// ── Settlement Speed ──
+async function getSettlementSpeed() {
+  const result = await pool.query(
+    `SELECT u.id, u.name,
+            COUNT(fl.id)::int AS settlements,
+            ROUND(AVG(EXTRACT(EPOCH FROM (fl.created_at - p.paid_at))/3600)::numeric, 1) AS avg_hours_to_settle
+     FROM financial_ledger fl
+     JOIN payments p ON p.booking_id = fl.booking_id
+     JOIN users u ON u.id = p.worker_id
+     WHERE fl.event_type = 'settlement_recorded' AND p.paid_at IS NOT NULL
+     GROUP BY u.id`
+  );
+  return result.rows;
+}
+
 module.exports = {
   getTotalRevenue,
   getPendingRevenue,
@@ -96,4 +161,8 @@ module.exports = {
   getAverageInvoiceValue,
   getRevenueTrend,
   getUnpaidInvoicesCount,
+  getProviderBreakdown,
+  getOperationalMetrics,
+  getWorkerPaymentReliability,
+  getSettlementSpeed,
 };

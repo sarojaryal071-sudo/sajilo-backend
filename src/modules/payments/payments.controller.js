@@ -176,15 +176,22 @@ async function getWorkerPayments(req, res) {
 async function confirmDigital(req, res) {
   try {
     const { bookingId } = req.params;
-    const workerId = req.user?.id;
+    const customerId = req.user?.id;
+    const { payment_channel_id, provider } = req.body || {};
 
-    if (!workerId) {
+    if (!customerId) {
       return res.status(401).json({ error: 'Authentication required' });
     }
+    if (!payment_channel_id || !provider) {
+      return res.status(400).json({ error: 'payment_channel_id and provider are required' });
+    }
 
-    const updated = await paymentsService.confirmDigitalPayment(Number(bookingId), workerId);
+    const updated = await paymentsService.confirmDigitalPayment(
+      Number(bookingId),
+      customerId,
+      { payment_channel_id, provider }
+    );
     await emitPaymentUpdated(updated);
-
     return res.json({ payment: updated });
   } catch (err) {
     console.error('confirmDigital error:', err);
@@ -298,6 +305,20 @@ async function initiateCashPayment(req, res) {
       `UPDATE payments SET client_cash_intent_at = NOW() WHERE id = $1`,
       [payment.id]
     );
+
+        // ── Payment Timeline: client_cash_intent ──
+    try {
+      const { createPaymentEvent } = require('./paymentTimeline.service');
+      await createPaymentEvent({
+        bookingId: Number(bookingId),
+        paymentId: payment.id,
+        eventType: 'client_cash_intent',
+        performedByRole: 'customer',
+        performedById: customerId,
+      });
+    } catch (err) {
+      console.error('[paymentTimeline] client_cash_intent hook failed:', err.message);
+    }
 
         // Emit socket so worker UI updates
     await emitPaymentUpdated(payment);
