@@ -170,11 +170,24 @@ async function markCashPaidByWorker(bookingId, workerId) {
 
 async function confirmDigitalPayment(bookingId, workerId) {
   const payment = await paymentsModel.findByBookingId(bookingId);
+  console.log('DEBUG confirmDigitalPayment - payment:', JSON.stringify(payment, null, 2));
   if (!payment) throw new Error('Payment record not found');
   if (payment.worker_id !== workerId) throw new Error('Not authorized');
-  if (payment.status !== PAYMENT_STATUS_REGISTRY.AWAITING_DIGITAL_CONFIRMATION) {
-    throw new Error('Digital payment can only be confirmed when awaiting digital confirmation');
+  
+  // Allow digital confirmation when a provider is set, regardless of exact status
+  if (!payment.payment_provider) {
+    throw new Error('No digital payment provider selected');
   }
+  
+  const allowedStatuses = [
+    PAYMENT_STATUS_REGISTRY.PENDING_CASH,
+    PAYMENT_STATUS_REGISTRY.AWAITING_CASH_CONFIRMATION,
+    PAYMENT_STATUS_REGISTRY.AWAITING_DIGITAL_CONFIRMATION,
+  ];
+  if (!allowedStatuses.includes(payment.status)) {
+    throw new Error('Payment cannot be confirmed in current status');
+  }
+
   return markPaymentPaid(bookingId, 'worker', workerId);
 }
 
@@ -182,10 +195,10 @@ async function confirmDigitalPayment(bookingId, workerId) {
 /**
  * Record that the client has initiated payment (intent only, no status change).
  */
-async function setClientInitiated(paymentId) {
+async function setClientInitiated(paymentId, channelId, provider) {
   await pool.query(
-    `UPDATE payments SET client_initiated_at = NOW() WHERE id = $1`,
-    [paymentId]
+    `UPDATE payments SET client_initiated_at = NOW(), payment_channel_id = $2, payment_provider = $3 WHERE id = $1`,
+    [paymentId, channelId || null, provider || null]
   );
 }
 

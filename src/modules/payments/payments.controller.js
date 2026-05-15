@@ -118,8 +118,7 @@ async function confirmInvoice(req, res) {
 
 /**
  * PUT /api/payments/booking/:bookingId/confirm
- * Client records payment intent ONLY – does NOT finalize payment.
- * Worker must still confirm receipt via mark-cash-paid.
+ * Client confirms cash payment: pending_cash → paid
  */
 async function confirmCash(req, res) {
   try {
@@ -135,29 +134,28 @@ async function confirmCash(req, res) {
       return res.status(403).json({ error: 'You are not authorized to confirm this payment' });
     }
 
-    // Record intent only – do NOT change status to paid
-    await paymentsService.setClientInitiated(payment.id);
+    const updated = await paymentsService.confirmCashPayment(Number(bookingId), customerId);
+    await emitPaymentUpdated(updated);
 
-    // Notify worker that client claims to have paid
     try {
       await notificationsService.createNotification({
-        userId: payment.worker_id,
+        userId: updated.worker_id,
         userRole: 'worker',
-        type: 'payment_initiated',
-        title: 'Client Payment Initiated',
-        message: `Client for booking #${bookingId} says they have paid. Please confirm receipt.`,
+        type: 'payment_paid',
+        title: 'Payment received',
+        message: `Payment for booking #${bookingId} has been paid`,
         entityType: 'payment',
-        entityId: payment.id,
-        metadata: { booking_id: Number(bookingId), payment_id: payment.payment_id, initiated_by: 'customer' },
+        entityId: updated.id,
+        metadata: { booking_id: Number(bookingId), payment_id: updated.payment_id, paid_by: 'customer' },
       });
     } catch (err) {
-      console.error('Notification creation failed (payment_initiated):', err);
+      console.error('Notification creation failed (payment_paid by customer):', err);
     }
 
-    return res.json({ success: true, message: 'Payment intent recorded. Worker will confirm receipt.' });
+    return res.json({ payment: updated });
   } catch (err) {
     console.error('confirmCash error:', err);
-    return res.status(400).json({ error: err.message || 'Failed to record payment intent' });
+    return res.status(400).json({ error: err.message || 'Failed to confirm payment' });
   }
 }
 
@@ -267,6 +265,70 @@ async function initiateDigitalPayment(req, res) {
   }
 }
 
+/**
+ * POST /api/payments/booking/:bookingId/initiate-cash-payment
+ * Client records cash payment intent ONLY – does NOT finalize payment.
+ * Worker must still confirm receipt via mark-cash-paid.
+ */
+async function initiateCashPayment(req, res) {
+  try {
+    const { bookingId } = req.params;
+    const customerId = req.user?.id;
+
+    if (!customerId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const payment = await paymentsService.getPaymentByBookingId(Number(bookingId));
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment record not found' });
+    }
+
+    if (payment.customer_id !== customerId) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    // Only allow when awaiting cash confirmation
+    if (payment.status !== 'awaiting_cash_confirmation' && payment.status !== 'pending_cash') {
+      return res.status(400).json({ error: 'Cash payment cannot be initiated in current status' });
+    }
+
+    // Record intent timestamp – do NOT change status
+    await pool.query(
+      `UPDATE payments SET client_cash_intent_at = NOW() WHERE id = $1`,
+      [payment.id]
+    );
+
+        // Emit socket so worker UI updates
+    await emitPaymentUpdated(payment);
+
+    // Notify worker that client intends to pay cash
+    try {
+      await notificationsService.createNotification({
+        userId: payment.worker_id,
+        userRole: 'worker',
+        type: 'payment_initiated',
+        title: 'Client Paying by Cash',
+        message: `Client for booking #${bookingId} indicates they will pay by cash. Please confirm receipt.`,
+        entityType: 'payment',
+        entityId: payment.id,
+        metadata: { booking_id: Number(bookingId), payment_id: payment.payment_id },
+      });
+    } catch (err) {
+      console.error('Notification creation failed (cash intent):', err);
+    }
+
+    return res.json({
+      success: true,
+      message: 'Cash payment intent recorded. Worker will confirm receipt.',
+      data: { client_cash_intent_at: new Date().toISOString() },
+    });
+  } catch (err) {
+    console.error('initiateCashPayment error:', err);
+    return res.status(500).json({ error: 'Failed to record cash payment intent' });
+  }
+}
+
 module.exports = {
   getByBooking,
   confirmInvoice,
@@ -276,4 +338,5 @@ module.exports = {
   getCustomerPayments,
   confirmDigital,
   initiateDigitalPayment,
+  initiateCashPayment
 };

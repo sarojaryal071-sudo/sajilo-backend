@@ -7,5 +7,6 @@ router.get('/', authGuard, controller.getChannels);
 router.post('/', authGuard, controller.addChannel);
 router.put('/:id', authGuard, controller.updateChannel);
 router.delete('/:id', authGuard, controller.deleteChannel);
+router.get('/public/:workerId', controller.getPublicChannels);
 
 module.exports = router;

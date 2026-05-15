@@ -67,5 +67,12 @@ router.get(
   paymentsController.getCustomerPayments
 );
 
+// Client records cash payment intent (no status change)
+router.post(
+  '/booking/:bookingId/initiate-cash-payment',
+  authGuard,
+  paymentsController.initiateCashPayment
+);
+
 
 module.exports = router;

@@ -28,4 +28,35 @@ async function deleteChannel(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { getChannels, addChannel, updateChannel, deleteChannel };
+async function getPublicChannels(req, res, next) {
+  try {
+    const workerId = parseInt(req.params.workerId);
+    if (!workerId) return res.status(400).json({ success: false, message: 'Invalid worker ID' });
+
+    const channels = await paymentChannelsService.getChannels(workerId);
+    
+    // Mask sensitive data for public view
+    const publicChannels = channels
+      .filter(ch => ch.is_active)
+      .map(ch => ({
+        provider: ch.provider,
+        qr_image_url: ch.qr_image_url || null,
+        masked_account_number: maskAccountNumber(ch.account_number),
+        display_name: maskName(ch.account_holder),
+      }));
+
+    res.json({ success: true, data: publicChannels });
+  } catch (err) { next(err); }
+}
+
+function maskAccountNumber(num) {
+  if (!num || num.length < 4) return num || '—';
+  return num.slice(0, 2) + '••••' + num.slice(-2);
+}
+
+function maskName(name) {
+  if (!name) return '—';
+  return name[0] + '••••';
+}
+
+module.exports = { getChannels, addChannel, updateChannel, deleteChannel, getPublicChannels };
