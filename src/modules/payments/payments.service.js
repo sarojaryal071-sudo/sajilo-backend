@@ -3,7 +3,7 @@ const paymentsModel = require('./payments.model');
 const { PAYMENT_STATUS_REGISTRY } = require('../../config/operationalRegistries');
 const activityService = require('../activity/activity.service');
 const auditService = require('../audit/audit.service');
-
+const { pool } = require('../../config/database');
 
 /**
  * Auto-create a payment row when a booking is completed.
@@ -108,6 +108,14 @@ async function markPaymentPaid(bookingId, paidByRole, paidByUserId) {
     });
   } catch (err) { console.error('Activity log failed (payment completed):', err.message); }
 
+  // ── Ledger: append payment_confirmed entry (centralized for all paths) ──
+  try {
+    const ledgerService = require('../financialLedger/ledger.service');
+    await ledgerService.createPaymentConfirmedEntry(updated, paidByRole, paidByUserId);
+  } catch (err) {
+    console.error('Ledger entry failed (payment_confirmed) – continuing:', err.message);
+  }
+
   return updated;
 
   // ── Audit log the status transition ──
@@ -156,14 +164,6 @@ async function markCashPaidByWorker(bookingId, workerId) {
 
   const updated = await markPaymentPaid(bookingId, 'worker', workerId);
 
-  // ── Ledger: append payment_confirmed entry (non-blocking) ──
-  try {
-    const ledgerService = require('../financialLedger/ledger.service');
-    await ledgerService.createPaymentConfirmedEntry(updated, 'worker', workerId);
-  } catch (err) {
-    console.error('Ledger entry failed (payment_confirmed) – continuing:', err.message);
-  }
-
   return updated;
 }
 
@@ -177,6 +177,18 @@ async function confirmDigitalPayment(bookingId, workerId) {
   }
   return markPaymentPaid(bookingId, 'worker', workerId);
 }
+
+
+/**
+ * Record that the client has initiated payment (intent only, no status change).
+ */
+async function setClientInitiated(paymentId) {
+  await pool.query(
+    `UPDATE payments SET client_initiated_at = NOW() WHERE id = $1`,
+    [paymentId]
+  );
+}
+
 
 /**
  * Get payment record for a booking.
@@ -216,6 +228,7 @@ module.exports = {
   markCashPaidByWorker,
   confirmDigitalPayment,
   initiateDigitalPayment,
+  setClientInitiated,
   getPaymentByBookingId,
   getWorkerPayments,
   getCustomerPayments,

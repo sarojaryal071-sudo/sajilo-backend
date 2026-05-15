@@ -105,17 +105,19 @@ async function confirmInvoice(bookingId, { discount_amount, extra_items_json, pa
   const final_total = subtotal - discount + extraTotal;
 
   const result = await pool.query(
-    `UPDATE payments 
+        `UPDATE payments 
      SET discount_amount = $1,
          extra_items_json = $2::jsonb,
          final_total = $3,
          method = $4,
          status = $6,
          invoice_confirmed_at = NOW(),
+         payment_intent_started_at = $7,
+         payment_due_at = $8,
          updated_at = NOW()
      WHERE booking_id = $5
      RETURNING *`,
-    [
+        [
       discount_amount,
       JSON.stringify(extra_items_json),
       final_total,
@@ -123,7 +125,9 @@ async function confirmInvoice(bookingId, { discount_amount, extra_items_json, pa
       bookingId,
       (payment_method === 'cash' || !payment_method)
         ? PAYMENT_STATUS_REGISTRY.AWAITING_CASH_CONFIRMATION
-        : PAYMENT_STATUS_REGISTRY.AWAITING_DIGITAL_CONFIRMATION
+        : PAYMENT_STATUS_REGISTRY.AWAITING_DIGITAL_CONFIRMATION,
+      new Date().toISOString(),
+      new Date(Date.now() + 30 * 60 * 1000).toISOString()
     ]
   );
   return result.rows[0];
@@ -137,15 +141,17 @@ async function confirmInvoice(bookingId, { discount_amount, extra_items_json, pa
  */
 async function markPaid(bookingId, paidByRole, paidByUserId) {
   const result = await pool.query(
-    `UPDATE payments 
+        `UPDATE payments 
      SET status = '${PAYMENT_STATUS_REGISTRY.PAID}',
          paid_at = NOW(),
          paid_by_role = $1,
          paid_by_user = $2,
+         payment_settlement_mode = $4,
+         payment_settled_at = NOW(),
          updated_at = NOW()
      WHERE booking_id = $3
      RETURNING *`,
-    [paidByRole, paidByUserId, bookingId]
+        [paidByRole, paidByUserId, bookingId, paidByRole === 'customer' ? 'client' : 'worker']
   );
   return result.rows[0] || null;
 }

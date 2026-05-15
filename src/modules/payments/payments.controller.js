@@ -118,7 +118,8 @@ async function confirmInvoice(req, res) {
 
 /**
  * PUT /api/payments/booking/:bookingId/confirm
- * Client confirms cash payment: pending_cash → paid
+ * Client records payment intent ONLY – does NOT finalize payment.
+ * Worker must still confirm receipt via mark-cash-paid.
  */
 async function confirmCash(req, res) {
   try {
@@ -134,29 +135,29 @@ async function confirmCash(req, res) {
       return res.status(403).json({ error: 'You are not authorized to confirm this payment' });
     }
 
-    const updated = await paymentsService.confirmCashPayment(Number(bookingId), customerId);
-    await emitPaymentUpdated(updated);
+    // Record intent only – do NOT change status to paid
+    await paymentsService.setClientInitiated(payment.id);
 
-    // Notify the worker that payment has been made
+    // Notify worker that client claims to have paid
     try {
       await notificationsService.createNotification({
-        userId: updated.worker_id,
+        userId: payment.worker_id,
         userRole: 'worker',
-        type: 'payment_paid',
-        title: 'Payment received',
-        message: `Payment for booking #${bookingId} has been paid`,
+        type: 'payment_initiated',
+        title: 'Client Payment Initiated',
+        message: `Client for booking #${bookingId} says they have paid. Please confirm receipt.`,
         entityType: 'payment',
-        entityId: updated.id,
-        metadata: { booking_id: Number(bookingId), payment_id: updated.payment_id, paid_by: 'customer' },
+        entityId: payment.id,
+        metadata: { booking_id: Number(bookingId), payment_id: payment.payment_id, initiated_by: 'customer' },
       });
     } catch (err) {
-      console.error('Notification creation failed (payment_paid by customer):', err);
+      console.error('Notification creation failed (payment_initiated):', err);
     }
 
-    return res.json({ payment: updated });
+    return res.json({ success: true, message: 'Payment intent recorded. Worker will confirm receipt.' });
   } catch (err) {
     console.error('confirmCash error:', err);
-    return res.status(400).json({ error: err.message || 'Failed to confirm payment' });
+    return res.status(400).json({ error: err.message || 'Failed to record payment intent' });
   }
 }
 
