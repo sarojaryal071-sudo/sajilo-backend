@@ -74,30 +74,38 @@ async function createBooking({ customerId, workerId, serviceName, jobSize, selec
 
   // If selected services are provided, validate and compute total
   if (selectedServices && selectedServices.length > 0) {
-    const serviceIds = selectedServices.map(s => s.service_id);
+    // Accept both worker_service_id (custom services) and service_id (standard services)
+    const ids = selectedServices
+      .map(s => s.worker_service_id || s.service_id)
+      .filter(id => id != null);
 
-    // Fetch worker's active services that match
+    if (ids.length === 0) {
+      throw new Error('No valid services selected');
+    }
+
+    // Fetch worker's active services by worker_services.id (covers both standard and custom)
     const svcResult = await pool.query(
-      `SELECT ps.id AS service_id, ps.label, p.name AS profession_name, ws.price
+      `SELECT ps.id AS service_id, ps.label, p.name AS profession_name, ws.price,
+              ws.custom_label, ws.id AS worker_service_id
        FROM worker_services ws
-       JOIN profession_services ps ON ps.id = ws.service_id
-       JOIN professions p ON p.id = ws.profession_id
+       LEFT JOIN profession_services ps ON ps.id = ws.service_id
+       LEFT JOIN professions p ON p.id = ws.profession_id
        WHERE ws.worker_id = $1
          AND ws.is_active = true
-         AND ps.is_active = true
-         AND ws.service_id = ANY($2::int[])`,
-      [workerId, serviceIds]
+         AND ws.id = ANY($2::int[])`,
+      [workerId, ids]
     );
 
-    if (svcResult.rows.length !== serviceIds.length) {
+    if (svcResult.rows.length !== ids.length) {
       throw new Error('One or more selected services are inactive or unavailable');
     }
 
     // Build snapshot
     servicesSnapshot = svcResult.rows.map(row => ({
       service_id: row.service_id,
-      label: row.label,
-      profession_label: row.profession_name,
+      worker_service_id: row.worker_service_id,
+      label: row.custom_label || row.label,
+      profession_label: row.profession_name || null,
       price: parseFloat(row.price),
     }));
 
