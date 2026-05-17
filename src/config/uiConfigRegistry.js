@@ -327,7 +327,7 @@ const UI_CONFIG_REGISTRY = {
   // ─── VALIDATION RULES ─────────────────────────────────────────
   validation: {
     // Maximum number of tokens per scope
-    maxTokensPerScope: 50,
+    maxTokensPerScope: 80,
     // Disallowed CSS properties (security)
     disallowedKeys: ['position', 'display', 'z-index', 'transform', 'content'],
     // Token value max length
