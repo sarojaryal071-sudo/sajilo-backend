@@ -1,5 +1,6 @@
 // sajilo-backend/src/modules/financialLedger/ledger.service.js
 const { pool } = require('../../config/database');
+const { onLedgerEntryCreated } = require('../accounting/ledgerEventListener');
 
 class LedgerService {
   /**
@@ -35,7 +36,10 @@ class LedgerService {
         created_by_user,
       ]
     );
-    return result.rows[0];
+    const entry = result.rows[0];
+    // Fire‑and‑forget accounting hook – never blocks ledger
+    onLedgerEntryCreated(entry);
+    return entry;
   }
 
   /**

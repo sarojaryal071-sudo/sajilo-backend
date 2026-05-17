@@ -43,6 +43,8 @@ app.get('/api/health', (req, res) => {
 
 const adminRoutes = require('./modules/admin/admin.routes')
 
+const accountingAdminRoutes = require('./modules/accounting/accountingAdmin.routes');
+
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/bookings', bookingRoutes)
@@ -59,6 +61,9 @@ app.use('/health', require('./modules/system/health.routes'))
 app.use('/api/support/tickets', require('./modules/support/supportTickets.routes').userRouter)
 app.use('/api/payment-channels', require('./modules/payments/paymentChannels.routes'))
 app.use('/api/ledger', require('./modules/financialLedger/ledger.routes'));
+app.use('/api/admin/accounting', accountingAdminRoutes);
+app.use('/api/admin/expenses', require('./modules/expenses/expensesAdmin.routes'));
+app.use('/api/admin/control', require('./modules/control/control.routes'));
 
 app.use(errorHandler)
 

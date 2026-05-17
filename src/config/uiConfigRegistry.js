@@ -267,6 +267,41 @@ const UI_CONFIG_REGISTRY = {
         },
       },
     },
+    branding: {
+      label: 'Branding',
+      description: 'Ecosystem identity (logos, names, favicon)',
+      tokens: {}
+    },
+    features: {
+      label: 'Features',
+      description: 'Feature flags and module toggles',
+      tokens: {}
+    },
+    navigation: {
+      label: 'Navigation',
+      description: 'Sidebar and navigation visibility',
+      tokens: {}
+    },
+    content: {
+      label: 'Content',
+      description: 'Dynamic text content (auth, onboarding, home, banners, etc.)',
+      tokens: {}
+    },
+    variants: {
+      label: 'Variants',
+      description: 'UI component variant configurations',
+      tokens: {}
+    },
+    colorsGrading: {
+      label: 'Color Grading',
+      description: 'Saturation, brightness, warmth, opacity adjustments per color',
+      tokens: {}
+    },
+    layouts: {
+      label: 'Layouts',
+      description: 'Page block configurations (homepage, etc.)',
+      tokens: {}
+    },
   },
 
   // ─── DEFAULT CONFIGURATIONS PER SCOPE ─────────────────────────

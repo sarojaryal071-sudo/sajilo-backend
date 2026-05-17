@@ -1,0 +1,14 @@
+// sajilo-backend/src/modules/accounting/accountingEventTypes.js
+
+const ACCOUNTING_EVENTS = {
+  BOOKING_PAYMENT:      'BOOKING_PAYMENT',
+  PAYMENT_SUCCESS:      'PAYMENT_SUCCESS',
+  PAYMENT_FAILED:       'PAYMENT_FAILED',
+  WORKER_PAYOUT:        'WORKER_PAYOUT',
+  REFUND:               'REFUND',
+  DISPUTE_RESOLUTION:   'DISPUTE_RESOLUTION',
+  COMMISSION_EARNED:    'COMMISSION_EARNED',
+  ADJUSTMENT:           'ADJUSTMENT',
+};
+
+module.exports = ACCOUNTING_EVENTS;

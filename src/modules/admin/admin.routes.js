@@ -19,5 +19,7 @@ router.use('/professions', authGuard, roleGuard('admin'), require('./admin.profe
 router.use('/feature-flags', authGuard, roleGuard('admin'), require('./admin.featureFlags.routes'))
 router.use('/live-operations', authGuard, roleGuard('admin'), require('./admin.liveOperations.routes'))
 router.use('/moderation', authGuard, roleGuard('admin'), require('./moderation.routes'))
+router.use('/finance', authGuard, roleGuard('admin'), require('../financialReporting/financialReporting.routes'));
+
 
 module.exports = router

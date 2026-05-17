@@ -141,25 +141,29 @@ class UIConfigService {
       [scope]
     );
 
-    // Promote draft to published
+        // Promote draft to published
     const result = await pool.query(
       `UPDATE ui_configurations
        SET status = 'published', version = $2, updated_at = NOW()
-       WHERE id = $3
+       WHERE scope = $1 AND status = 'draft'
        RETURNING *`,
-      [scope, newVersion, draftConfig.id]
+      [scope, newVersion]
     );
 
     // Store tokens snapshot
     const tokens = this._flattenTokens(draftConfig.config_json);
     for (const [category, values] of Object.entries(tokens)) {
+      // Skip categories that have no token definitions (e.g. branding)
+      const catDef = UI_CONFIG_REGISTRY.tokenCategories[category];
+      if (!catDef || !catDef.tokens || Object.keys(catDef.tokens).length === 0) continue;
+
       for (const [key, value] of Object.entries(values)) {
         await pool.query(
           `INSERT INTO ui_design_tokens (scope, token_category, token_key, token_value, version)
-           VALUES ($1, $2, $3, $4, $5)
+           VALUES ($1, $2, $3, $4::text, $5)
            ON CONFLICT (scope, token_category, token_key, version)
-           DO UPDATE SET token_value = $4, updated_at = NOW()`,
-          [scope, category, key, String(value), newVersion]
+           DO UPDATE SET token_value = $4::text, updated_at = NOW()`,
+          [scope, category, key, String(value ?? ''), newVersion]
         );
       }
     }
@@ -218,7 +222,8 @@ class UIConfigService {
     if (!config) return tokens;
     const cfg = typeof config === 'string' ? JSON.parse(config) : config;
     for (const [category, values] of Object.entries(cfg)) {
-      if (UI_CONFIG_REGISTRY.tokenCategories[category]) {
+      const catDef = UI_CONFIG_REGISTRY.tokenCategories[category];
+      if (catDef && catDef.tokens && Object.keys(catDef.tokens).length > 0) {
         tokens[category] = values;
       }
     }
@@ -232,14 +237,17 @@ class UIConfigService {
     for (const [category, values] of Object.entries(cfg)) {
       const catDef = UI_CONFIG_REGISTRY.tokenCategories[category];
       if (!catDef) {
-        errors.push(`Unknown category: ${category}`);
+        console.warn(`[UIConfig] Unknown category: ${category} – skipping validation`);
         continue;
       }
+
+      // If the category has no token definitions (e.g. branding), skip token‑level checks
+      if (!catDef.tokens || Object.keys(catDef.tokens).length === 0) continue;
 
       for (const [key, value] of Object.entries(values)) {
         const tokenDef = catDef.tokens[key];
         if (!tokenDef) {
-          errors.push(`Unknown token: ${category}.${key}`);
+          console.warn(`[UIConfig] Unknown token: ${category}.${key} – skipping validation`);
           continue;
         }
 
