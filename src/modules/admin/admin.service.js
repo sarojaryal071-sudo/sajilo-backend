@@ -68,6 +68,23 @@ async function approveWorker(id) {
     })
   }
 
+    // Notify worker of approval
+  try {
+    const notificationsService = require('../notification/notification.service');
+    await notificationsService.createNotification({
+      userId: id,
+      userRole: 'worker',
+      type: 'onboarding',
+      title: 'Application Approved',
+      message: 'Your worker application has been approved.',
+      entityType: 'worker_application',
+      entityId: null, // we don't have the application ID here, could query
+      metadata: { action: 'approved', userId: id },
+    });
+  } catch (err) {
+    console.error('Failed to notify worker of approval:', err);
+  }
+
   return result.rows[0]
 }
 
@@ -77,6 +94,24 @@ async function rejectWorker(id) {
     [id]
   )
   if (!result.rows[0]) throw new Error('Worker not found')
+
+      // Notify worker of rejection
+  try {
+    const notificationsService = require('../notification/notification.service');
+    await notificationsService.createNotification({
+      userId: id,
+      userRole: 'worker',
+      type: 'onboarding',
+      title: 'Application Rejected',
+      message: 'Your worker application was rejected.',
+      entityType: 'worker_application',
+      entityId: null,
+      metadata: { action: 'rejected', userId: id },
+    });
+  } catch (err) {
+    console.error('Failed to notify worker of rejection:', err);
+  }
+  
   return result.rows[0]
 }
 

@@ -10,6 +10,9 @@ router.use(authGuard);
 // Admin: dispatch a notification to multiple users
 router.post('/dispatch', dispatchController.dispatch);
 
+// Admin: get dispatch history
+router.get('/dispatch/history', notificationsController.getDispatchHistory);
+
 // Get all notifications for the logged-in user
 router.get('/', notificationsController.getAll);
 

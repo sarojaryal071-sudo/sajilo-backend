@@ -20,7 +20,11 @@ async function emitNotification(notification) {
     const clientId = userResult.rows[0]?.client_id || `U${notification.user_id}`;
     const room = `user:${clientId}`;
 
+    console.log('[notification.emit]', room, notification.id, new Date().toISOString());
+
+
     io.to(room).emit('notification.created', {
+      id: notification.id,
       type: notification.type,
       title: notification.title,
       message: notification.message,

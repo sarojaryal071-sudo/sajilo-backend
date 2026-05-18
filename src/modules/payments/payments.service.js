@@ -4,6 +4,7 @@ const { PAYMENT_STATUS_REGISTRY } = require('../../config/operationalRegistries'
 const activityService = require('../activity/activity.service');
 const auditService = require('../audit/audit.service');
 const { pool } = require('../../config/database');
+const notificationsService = require('../notification/notification.service');
 
 /**
  * Auto-create a payment row when a booking is completed.
@@ -64,6 +65,20 @@ async function confirmInvoiceWithEdits(bookingId, workerId, { discount_amount, e
       createdBy: workerId,
     });
   } catch (err) { console.error('Activity log failed (invoice generated):', err.message); }
+
+   // Notify customer – invoice ready
+  try {
+    await notificationsService.createNotification({
+      userId: payment.customer_id,
+      userRole: 'customer',
+      type: 'payment',
+      title: 'Invoice Ready',
+      message: `Invoice for booking #${bookingId} is ready for review.`,
+      entityType: 'payment',
+      entityId: updated.id,
+      metadata: { action: 'invoice_ready', invoiceId: updated.id, bookingId },
+    });
+  } catch (err) { console.error('Notification failed (invoice_ready):', err.message); }
 
   // ── Ledger: append invoice_finalized entry (non-blocking) ──
   try {
@@ -189,6 +204,36 @@ async function markPaymentPaid(bookingId, paidByRole, paidByUserId, metadata = {
   } catch (auditErr) {
     console.error('Audit log write failed (non‑blocking):', auditErr.message);
   }
+
+  // Notify both parties about payment confirmation
+  try {
+    const payerRole = paidByRole;
+    const payerId = paidByUserId;
+    const receiverId = payment.worker_id; // worker receives payment
+    const receiverRole = 'worker';
+    const isDigital = payment.method === 'digital';
+
+    await notificationsService.createNotification({
+      userId: payment.customer_id,
+      userRole: 'customer',
+      type: 'payment',
+      title: 'Payment Confirmed',
+      message: `Payment for booking #${bookingId} has been confirmed.`,
+      entityType: 'payment',
+      entityId: updated.id,
+      metadata: { action: 'paid', invoiceId: updated.id, bookingId, payerRole, receiverRole },
+    });
+    await notificationsService.createNotification({
+      userId: payment.worker_id,
+      userRole: 'worker',
+      type: 'payment',
+      title: 'Payment Received',
+      message: `Payment for booking #${bookingId} has been received.`,
+      entityType: 'payment',
+      entityId: updated.id,
+      metadata: { action: 'paid', invoiceId: updated.id, bookingId, payerRole: 'customer', receiverRole: 'worker' },
+    });
+  } catch (err) { console.error('Notification failed (payment_paid):', err.message); }
 
   return updated;
 }

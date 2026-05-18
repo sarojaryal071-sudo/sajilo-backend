@@ -75,6 +75,31 @@ async function submitWorkerApplication(req, res) {
        acceptTerms, backgroundCheck, safetyAgreement]
     )
     
+    // Notify admins about new worker application
+    try {
+      const notificationsService = require('../notification/notification.service');
+      const { pool } = require('../../config/database');
+      const userResult = await pool.query('SELECT name FROM users WHERE id = $1', [userId]);
+      const applicantName = userResult.rows[0]?.name || 'A worker';
+
+      // Find all active admin user IDs
+      const adminResult = await pool.query('SELECT id FROM users WHERE role = $1 AND status = $2', ['admin', 'active']);
+      for (const admin of adminResult.rows) {
+        await notificationsService.createNotification({
+          userId: admin.id,
+          userRole: 'admin',
+          type: 'onboarding',
+          title: 'New Worker Application',
+          message: `${applicantName} submitted an application.`,
+          entityType: 'worker_application',
+          entityId: result.rows[0].id,
+          metadata: { action: 'submitted', applicationId: result.rows[0].id, userId },
+        });
+      }
+    } catch (err) {
+      console.error('Failed to notify admins of worker application:', err);
+    }
+
     res.json({ success: true, data: result.rows[0] })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })

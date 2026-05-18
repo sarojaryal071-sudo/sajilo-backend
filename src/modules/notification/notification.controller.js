@@ -117,6 +117,37 @@ async function dispatch(req, res) {
   }
 }
 
+/**
+ * GET /api/notifications/dispatch/history
+ * Returns all dispatches created by the authenticated admin.
+ */
+async function getDispatchHistory(req, res) {
+  try {
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+
+    // Only admins can view dispatch history
+    if (userRole !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const { pool } = require('../../config/database');
+    const { rows } = await pool.query(
+      `SELECT id, title, message, priority, target_type, target_value AS target_category, status, created_at
+       FROM notification_dispatches
+       WHERE created_by = $1
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [userId]
+    );
+
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('getDispatchHistory error:', err);
+    res.status(500).json({ error: 'Failed to fetch dispatch history' });
+  }
+}
+
 module.exports = {
   getAll,
   getUnread,
@@ -124,4 +155,5 @@ module.exports = {
   markRead,
   markAllRead,
   dispatch,
+  getDispatchHistory,
 };

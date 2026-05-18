@@ -147,12 +147,12 @@ async function createBooking({ customerId, workerId, serviceName, jobSize, selec
     await notificationsService.createNotification({
       userId: booking.worker_id,
       userRole: 'worker',
-      type: NOTIFICATION_TYPE_REGISTRY.BOOKING_CREATED,
+      type: 'booking',
       title: 'New booking request',
       message: `New booking #${booking.id} from client`,
       entityType: 'booking',
       entityId: booking.id,
-      metadata: { booking_id: booking.id, customer_id: booking.customer_id },
+      metadata: { action: 'created', bookingId: booking.id, customerId: booking.customer_id },
     });
   } catch (err) {
     console.error('Notification creation failed (booking.created):', err);
@@ -222,20 +222,20 @@ async function acceptBooking(bookingId, workerId) {
     });
   } catch (err) { console.error('Activity log failed (booking.accepted):', err.message); }
 
-  // Notify customer that booking was accepted
+    // Notify customer that booking was accepted
   try {
     await notificationsService.createNotification({
       userId: booking.customer_id,
       userRole: 'customer',
-      type: NOTIFICATION_TYPE_REGISTRY.BOOKING_ACCEPTED,
-      title: 'Worker accepted your booking',
-      message: `Booking #${booking.id} has been accepted`,
+      type: 'booking',
+      title: 'Booking Accepted',
+      message: `Your booking #${booking.id} has been accepted.`,
       entityType: 'booking',
       entityId: booking.id,
-      metadata: { booking_id: booking.id, worker_id: booking.worker_id },
-    })
+      metadata: { action: 'accepted', bookingId: booking.id, workerId: booking.worker_id },
+    });
   } catch (err) {
-    console.error('Notification creation failed (booking.accepted):', err)
+    console.error('Notification creation failed (booking.accepted):', err);
   }
 
   return updated
@@ -256,15 +256,15 @@ async function rejectBooking(bookingId, workerId) {
     await notificationsService.createNotification({
       userId: booking.customer_id,
       userRole: 'customer',
-      type: NOTIFICATION_TYPE_REGISTRY.BOOKING_REJECTED,
-      title: 'Worker rejected your booking',
-      message: `Booking #${booking.id} was rejected`,
+      type: 'booking',
+      title: 'Booking Rejected',
+      message: `Your booking #${booking.id} was rejected.`,
       entityType: 'booking',
       entityId: booking.id,
-      metadata: { booking_id: booking.id, worker_id: booking.worker_id },
-    })
+      metadata: { action: 'rejected', bookingId: booking.id, workerId: booking.worker_id },
+    });
   } catch (err) {
-    console.error('Notification creation failed (booking.rejected):', err)
+    console.error('Notification creation failed (booking.rejected):', err);
   }
 
   return updated
@@ -295,6 +295,57 @@ async function updateBookingStatus(bookingId, workerId, status) {
     `booking.${status}`,
     updated
   )
+
+  // ── Send normalized booking notifications ──
+  try {
+    if (status === BOOKING_STATUS_REGISTRY.ONWAY) {
+      await notificationsService.createNotification({
+        userId: booking.customer_id,
+        userRole: 'customer',
+        type: 'booking',
+        title: 'Worker is on the way',
+        message: `The worker is on the way to your booking #${booking.id}.`,
+        entityType: 'booking',
+        entityId: booking.id,
+        metadata: { action: 'onway', bookingId: booking.id, workerId: booking.worker_id },
+      });
+    } else if (status === BOOKING_STATUS_REGISTRY.WORKING) {
+      await notificationsService.createNotification({
+        userId: booking.customer_id,
+        userRole: 'customer',
+        type: 'booking',
+        title: 'Work started',
+        message: `Work has begun on booking #${booking.id}.`,
+        entityType: 'booking',
+        entityId: booking.id,
+        metadata: { action: 'working', bookingId: booking.id, workerId: booking.worker_id },
+      });
+    } else if (status === BOOKING_STATUS_REGISTRY.COMPLETED) {
+      // Notify both client and worker
+      await notificationsService.createNotification({
+        userId: booking.customer_id,
+        userRole: 'customer',
+        type: 'booking',
+        title: 'Booking Completed',
+        message: `Booking #${booking.id} has been completed.`,
+        entityType: 'booking',
+        entityId: booking.id,
+        metadata: { action: 'completed', bookingId: booking.id, workerId: booking.worker_id },
+      });
+      await notificationsService.createNotification({
+        userId: booking.worker_id,
+        userRole: 'worker',
+        type: 'booking',
+        title: 'Booking Completed',
+        message: `You completed booking #${booking.id}.`,
+        entityType: 'booking',
+        entityId: booking.id,
+        metadata: { action: 'completed', bookingId: booking.id, customerId: booking.customer_id },
+      });
+    }
+  } catch (err) {
+    console.error('Notification creation failed (booking status update):', err);
+  }
 
   // Log activity for completed bookings
   if (status === BOOKING_STATUS_REGISTRY.COMPLETED) {
@@ -371,15 +422,15 @@ async function cancelBooking(bookingId, userId, reason = null) {
     await notificationsService.createNotification({
       userId: booking.worker_id,
       userRole: 'worker',
-      type: NOTIFICATION_TYPE_REGISTRY.BOOKING_CANCELLED,
-      title: 'Booking cancelled by customer',
-      message: `Booking #${booking.id} has been cancelled`,
+      type: 'booking',
+      title: 'Booking Cancelled',
+      message: `Booking #${booking.id} has been cancelled by the customer.`,
       entityType: 'booking',
       entityId: booking.id,
-      metadata: { booking_id: booking.id, reason: reason },
-    })
+      metadata: { action: 'cancelled', bookingId: booking.id, reason: reason || null },
+    });
   } catch (err) {
-    console.error('Notification creation failed (booking.cancelled):', err)
+    console.error('Notification creation failed (booking.cancelled):', err);
   }
 
   return updated
