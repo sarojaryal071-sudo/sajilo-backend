@@ -1,6 +1,6 @@
+// sajilo-backend/src/modules/settings/settings.model.js
 const { pool } = require('../../config/database');
 
-// Default settings structure matching the new specification
 const DEFAULT_SETTINGS = {
   account: {
     fullName: '',
@@ -30,24 +30,19 @@ const DEFAULT_SETTINGS = {
     privacyPolicy: '',
     terms: '',
   },
-  appInfo: {
-    version: '1.0.0',
-    build: '2026.05',
-    developer: 'Sajilo',
-  },
 };
 
-// Allowed top‑level sections (used for validation)
 const ALLOWED_SECTIONS = Object.keys(DEFAULT_SETTINGS);
 
-async function getOrCreate(userId) {
-  const existing = await pool.query(
+async function getOrCreate(userId, client = null) {
+  const db = client || pool;
+  const existing = await db.query(
     'SELECT * FROM user_settings WHERE user_id = $1',
     [userId]
   );
   if (existing.rows.length > 0) return existing.rows[0];
 
-  const result = await pool.query(
+  const result = await db.query(
     `INSERT INTO user_settings (user_id, settings)
      VALUES ($1, $2)
      RETURNING *`,
@@ -56,8 +51,9 @@ async function getOrCreate(userId) {
   return result.rows[0];
 }
 
-async function update(userId, mergedSettings) {
-  const result = await pool.query(
+async function update(userId, mergedSettings, client = null) {
+  const db = client || pool;
+  const result = await db.query(
     `UPDATE user_settings
      SET settings = $1, updated_at = NOW()
      WHERE user_id = $2

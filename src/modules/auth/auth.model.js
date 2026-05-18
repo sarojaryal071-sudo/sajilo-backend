@@ -170,6 +170,28 @@ async function hasWorkerApplication(userId) {
   return result.rows[0]?.exists || false
 }
 
+// ── Identity sync helper ──
+async function updateUserIdentity(userId, updates) {
+  const allowedColumns = ['name', 'email', 'phone'];
+  const setClauses = [];
+  const values = [];
+  let paramIndex = 1;
+
+  for (const [column, value] of Object.entries(updates)) {
+    if (!allowedColumns.includes(column)) continue;
+    setClauses.push(`${column} = $${paramIndex}`);
+    values.push(value);
+    paramIndex++;
+  }
+
+  if (setClauses.length === 0) return null; // nothing to update
+
+  values.push(userId);
+  const query = `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING id, name, email, phone`;
+  const result = await pool.query(query, values);
+  return result.rows[0] || null;
+}
+
 module.exports = {
   createUserTable,
   findByEmail,
@@ -178,4 +200,5 @@ module.exports = {
   generateClientId,
   approveWorkerClientId,
   hasWorkerApplication,
-}
+  updateUserIdentity,   // ← new
+};

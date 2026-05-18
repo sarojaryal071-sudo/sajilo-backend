@@ -52,6 +52,7 @@ app.use('/api/bookings', bookingRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/chat', chatRoutes)
 app.use('/api/settings', settingsRoutes);
+app.use('/api/app-config', require('./modules/app-config/appConfig.routes'));
 app.use('/api/workers', workerRoutes)
 app.use('/api/workers/view', require('./modules/workers/workers.view.routes'))
 app.use('/api/locations', require('./modules/locations/locations.routes'))
