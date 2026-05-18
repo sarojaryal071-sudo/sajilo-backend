@@ -11,6 +11,7 @@ const authModel = require('./modules/auth/auth.model')
 const bookingsModel = require('./modules/bookings/bookings.model')
 const chatModel = require('./modules/chat/chat.model')
 const workerRoutes = require('./modules/workers/worker.routes')
+const settingsRoutes = require('./modules/settings/settings.routes');
 
 const app = express()
 
@@ -50,6 +51,7 @@ app.use('/api/users', userRoutes)
 app.use('/api/bookings', bookingRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/chat', chatRoutes)
+app.use('/api/settings', settingsRoutes);
 app.use('/api/workers', workerRoutes)
 app.use('/api/workers/view', require('./modules/workers/workers.view.routes'))
 app.use('/api/locations', require('./modules/locations/locations.routes'))
