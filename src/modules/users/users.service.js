@@ -58,4 +58,9 @@ async function saveWorkerSchedule(userId, schedule) {
   return usersModel.saveWorkerAvailability(userId, schedule)
 }
 
-module.exports = { getProfile, updateProfile, getWorkerProfile, updateWorkerProfile, getWorkerEarnings, getWorkerSchedule, saveWorkerSchedule }
+async function updateProfileImage(userId, imageUrl) {
+  const authModel = require('../auth/auth.model');
+  return authModel.updateUserIdentity(userId, { profile_image_url: imageUrl });
+}
+
+module.exports = { getProfile, updateProfile, getWorkerProfile, updateWorkerProfile, getWorkerEarnings, getWorkerSchedule, saveWorkerSchedule, updateProfileImage }

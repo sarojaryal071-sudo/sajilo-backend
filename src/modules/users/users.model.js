@@ -2,7 +2,7 @@ const { pool } = require('../../config/database')
 
 async function findById(id) {
   const result = await pool.query(
-    'SELECT id, email, role, name, phone, photo_url, status, created_at FROM users WHERE id = $1',
+    'SELECT id, email, role, name, phone, photo_url, profile_image_url, status, created_at FROM users WHERE id = $1',
     [id]
   )
   return result.rows[0] || null
@@ -17,7 +17,7 @@ async function update(id, fields) {
          photo_url = COALESCE($3, photo_url),
          updated_at = NOW()
      WHERE id = $4
-     RETURNING id, email, role, name, phone, photo_url, status, created_at`,
+     RETURNING id, email, role, name, phone, photo_url, profile_image_url, status, created_at`,
     [name, phone, photo_url, id]
   )
   return result.rows[0] || null
@@ -25,7 +25,7 @@ async function update(id, fields) {
 
 async function getWorkerProfile(userId) {
   const result = await pool.query(
-    `SELECT u.id, u.email, u.role, u.name, u.phone, u.photo_url, u.status,
+    `SELECT u.id, u.email, u.role, u.name, u.phone, u.photo_url, u.profile_image_url, u.status,
             u.client_id,
             COALESCE(u.primary_skill, wa.primary_role) AS primary_skill,
             wa.secondary_roles AS secondary_roles,

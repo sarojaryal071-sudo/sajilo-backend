@@ -46,6 +46,7 @@ const adminRoutes = require('./modules/admin/admin.routes')
 
 const accountingAdminRoutes = require('./modules/accounting/accountingAdmin.routes');
 
+app.use('/uploads', express.static('uploads'));
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/bookings', bookingRoutes)
@@ -67,6 +68,9 @@ app.use('/api/ledger', require('./modules/financialLedger/ledger.routes'));
 app.use('/api/admin/accounting', accountingAdminRoutes);
 app.use('/api/admin/expenses', require('./modules/expenses/expensesAdmin.routes'));
 app.use('/api/admin/control', require('./modules/control/control.routes'));
+app.use('/api/media', require('./modules/media/media.routes'));
+app.use('/api/documents', require('./modules/documents/documents.routes'));
+app.use('/api/files', require('./modules/files/files.routes'));
 
 app.use(errorHandler)
 

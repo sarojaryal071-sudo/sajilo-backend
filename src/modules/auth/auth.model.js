@@ -103,7 +103,7 @@ async function findByEmail(email) {
 
 async function findById(id) {
   const result = await pool.query(
-    'SELECT id, email, role, name, legal_name, phone, photo_url, document_url, client_id, primary_skill, skills, hourly_rate, bio, status, welcomed, created_at FROM users WHERE id = $1',
+    'SELECT id, email, role, name, legal_name, phone, photo_url, document_url, profile_image_url, client_id, primary_skill, skills, hourly_rate, bio, status, welcomed, created_at FROM users WHERE id = $1',
     [id]
   )
   return result.rows[0] || null
@@ -172,7 +172,7 @@ async function hasWorkerApplication(userId) {
 
 // ── Identity sync helper ──
 async function updateUserIdentity(userId, updates) {
-  const allowedColumns = ['name', 'email', 'phone'];
+      const allowedColumns = ['name', 'email', 'phone', 'profile_image_url'];
   const setClauses = [];
   const values = [];
   let paramIndex = 1;
