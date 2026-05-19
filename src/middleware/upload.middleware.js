@@ -1,32 +1,29 @@
 // sajilo-backend/src/middleware/upload.middleware.js
 const multer = require('multer');
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('../config/cloudinary');
 
-const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.resolve('uploads/temp'));
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, uuidv4() + ext);
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req, file) => {
+    const isImage = file.mimetype.startsWith('image/');
+    return {
+      folder: isImage ? 'sajilo/images' : 'sajilo/documents',
+      resource_type: 'auto',
+      allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+      transformation: isImage ? [
+        {
+          width: 512,
+          height: 512,
+          crop: 'fill',
+          quality: 'auto',
+          fetch_format: 'auto',
+        },
+      ] : undefined,
+    };
   },
 });
 
-const fileFilter = (req, file, cb) => {
-  if (ALLOWED_MIMES.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only JPEG, PNG, WebP, and PDF files are allowed'));
-  }
-};
-
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 },   // 10 MB global max
-});
+const upload = multer({ storage });
 
 module.exports = upload;

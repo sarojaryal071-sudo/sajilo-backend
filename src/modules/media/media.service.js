@@ -1,11 +1,9 @@
 // sajilo-backend/src/modules/media/media.service.js
 const mediaModel = require('./media.model');
 const { validateEntityType, generateFileName, buildFileUrl, validateFileType } = require('./media.utils');
-const fs = require('fs');
-const path = require('path');
-const sharp = require('sharp');
 
-const UPLOAD_ROOT = path.resolve(process.cwd(), 'uploads');
+// Cloudinary is now used via multer-storage-cloudinary; files arrive with .path = HTTPS URL.
+// No local disk operations are needed.
 
 async function saveProfileImage(file, entityType, userId) {
   validateEntityType(entityType);
@@ -16,27 +14,8 @@ async function saveProfileImage(file, entityType, userId) {
     throw new Error('Only JPEG, PNG, or WebP images are allowed');
   }
 
-  const fileName = generateFileName(entityType, userId, file.originalname);
-  const uploadDir = path.join(UPLOAD_ROOT, entityType);
-  const destPath = path.join(uploadDir, fileName);
-
-  fs.mkdirSync(uploadDir, { recursive: true });
-
-  // Optimize and save the image
-  try {
-    await sharp(file.path)
-      .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 80 })
-      .toFile(destPath);
-  } catch (err) {
-    // If optimization fails, fall back to the original file
-    fs.copyFileSync(file.path, destPath);
-  }
-
-  // Remove the temp file
-  try { fs.unlinkSync(file.path); } catch (_) {}
-
-  const fileUrl = buildFileUrl(entityType, fileName);
+  // file.path is now a Cloudinary HTTPS URL (set by multer-storage-cloudinary)
+  const fileUrl = file.path;
 
   const record = await mediaModel.create({
     entity_type: entityType,
@@ -44,8 +23,8 @@ async function saveProfileImage(file, entityType, userId) {
     file_url: fileUrl,
     file_name: file.originalname,
     file_type: 'image',
-    mime_type: 'image/jpeg',   // we converted to JPEG
-    size_bytes: fs.statSync(destPath).size,
+    mime_type: file.mimetype,
+    size_bytes: file.size || 0,
   });
 
   return { url: fileUrl, media_id: record.id };
@@ -57,14 +36,7 @@ async function saveDocument(file, entityType, userId) {
     throw new Error('Only PDF documents are allowed');
   }
 
-  const fileName = generateFileName(entityType, userId, file.originalname);
-  const uploadDir = path.join(UPLOAD_ROOT, 'documents');
-  const destPath = path.join(uploadDir, fileName);
-
-  fs.mkdirSync(uploadDir, { recursive: true });
-  fs.renameSync(file.path, destPath);
-
-  const fileUrl = buildFileUrl('documents', fileName);
+  const fileUrl = file.path;
 
   const record = await mediaModel.create({
     entity_type: 'document',
@@ -73,7 +45,7 @@ async function saveDocument(file, entityType, userId) {
     file_name: file.originalname,
     file_type: 'document',
     mime_type: file.mimetype,
-    size_bytes: file.size,
+    size_bytes: file.size || 0,
   });
 
   return { url: fileUrl, media_id: record.id };
@@ -88,15 +60,41 @@ async function deleteFile(mediaId) {
   const media = await mediaModel.findById(mediaId);
   if (!media) throw new Error('Media not found');
 
-  const filePath = path.join(UPLOAD_ROOT, media.entity_type, path.basename(media.file_url));
-  try {
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-  } catch (err) {
-    console.error('Failed to delete physical file:', err.message);
+  // Delete from Cloudinary using the public_id extracted from the URL
+  const cloudinary = require('../../config/cloudinary');
+  const publicId = getPublicIdFromUrl(media.file_url);
+  if (publicId) {
+    try {
+      await cloudinary.uploader.destroy(publicId);
+    } catch (err) {
+      console.error('Cloudinary delete failed:', err.message);
+    }
   }
 
   await mediaModel.remove(mediaId);
   return media;
+}
+
+/**
+ * Extract Cloudinary public_id from a URL like:
+ * https://res.cloudinary.com/<cloud>/image/upload/v1234/sajilo/images/abc.jpg
+ */
+function getPublicIdFromUrl(url) {
+  try {
+    const parts = url.split('/');
+    // Find the index of 'upload/' and take everything after that, excluding version
+    const uploadIdx = parts.indexOf('upload');
+    if (uploadIdx === -1) return null;
+    // The public_id is everything after the version folder (v1234) if present
+    const afterUpload = parts.slice(uploadIdx + 1);
+    // If the first element starts with 'v', it's a version, skip it
+    if (afterUpload[0] && afterUpload[0].startsWith('v')) {
+      return afterUpload.slice(1).join('/').split('.')[0]; // remove extension
+    }
+    return afterUpload.join('/').split('.')[0];
+  } catch {
+    return null;
+  }
 }
 
 module.exports = { saveProfileImage, saveDocument, getFilesByEntity, deleteFile };
