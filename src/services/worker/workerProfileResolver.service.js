@@ -54,7 +54,7 @@ class WorkerProfileResolver {
 
   async _getUser(workerId) {
     const result = await pool.query(
-      `SELECT id, client_id, name, email, phone, photo_url, role, bio,
+      `SELECT id, client_id, name, email, phone, photo_url, profile_image_url, role, bio,
               primary_skill, skills, is_online, status, welcomed,
               verification_status, document_url, hourly_rate,
               total_earnings, completed_jobs, created_at

@@ -5,7 +5,9 @@ const upload = require('../../middleware/upload.middleware');
 const controller = require('./media.controller');
 const authGuard = require('../../middleware/auth.guard');
 
+const uploadRateLimit = require('../../middleware/uploadRateLimit');
 router.use(authGuard);
+router.use(uploadRateLimit);
 
 // Profile image upload (user or worker)
 router.post('/upload/profile-image', upload.single('file'), controller.uploadProfileImage);

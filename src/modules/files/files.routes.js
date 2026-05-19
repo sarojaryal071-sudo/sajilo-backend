@@ -4,7 +4,9 @@ const router = express.Router();
 const upload = require('../../middleware/upload.middleware');
 const controller = require('./files.controller');
 const authGuard = require('../../middleware/auth.guard');
+const uploadRateLimit = require('../../middleware/uploadRateLimit');
 
+router.use(uploadRateLimit);
 router.use(authGuard);
 
 router.delete('/:type/:id', controller.remove);

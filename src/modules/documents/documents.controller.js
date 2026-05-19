@@ -1,4 +1,6 @@
+// sajilo-backend/src/modules/documents/documents.controller.js
 const documentsService = require('./documents.service');
+const mediaAuditService = require('../media/mediaAudit.service');
 
 async function upload(req, res) {
   try {
@@ -7,6 +9,7 @@ async function upload(req, res) {
     if (!type) return res.status(400).json({ success: false, error: 'Document type is required' });
 
     const doc = await documentsService.uploadDocument(req.file, req.user.id, type);
+    await mediaAuditService.logAction({ userId: req.user.id, fileType: 'document', fileUrl: doc.file_url, action: 'upload', req });
     res.json({ success: true, data: doc });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });

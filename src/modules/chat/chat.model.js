@@ -86,6 +86,7 @@ async function getUserConversations(userId) {
       CASE WHEN c.customer_id = $1 THEN u2.name ELSE u1.name END as other_name,
       CASE WHEN c.customer_id = $1 THEN c.worker_id ELSE c.customer_id END as other_id,
       CASE WHEN c.customer_id = $1 THEN u2.role ELSE u1.role END as other_role,
+      CASE WHEN c.customer_id = $1 THEN u2.profile_image_url ELSE u1.profile_image_url END as other_profile_image_url,
       (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id AND receiver_id = $1 AND read = false) as unread
      FROM conversations c
      JOIN users u1 ON c.customer_id = u1.id
