@@ -5,7 +5,7 @@ const { pool } = require('../../config/database')
 
 async function findById(id) {
   const result = await pool.query(
-    `SELECT u.id, u.client_id, u.name, u.email, u.phone, u.photo_url, u.skills, 
+    `SELECT u.id, u.client_id, u.name, u.email, u.phone, u.photo_url, u.profile_image_url, u.skills, 
             u.bio, u.hourly_rate, u.is_online, u.verification_status, u.status,
             u.total_earnings, u.completed_jobs, u.created_at,
             COALESCE(AVG(r.rating)::numeric, 0) as average_rating,
@@ -32,7 +32,7 @@ async function searchWorkers({ service, location, minRating, limit = 20, sortBy 
   const params = []
   let query = `
     SELECT 
-      u.id, u.client_id, u.name, u.photo_url,
+      u.id, u.client_id, u.name, u.photo_url, u.profile_image_url,
       COALESCE(u.primary_skill, wa.primary_role) AS primary_skill,
       wa.secondary_roles,
       wa.service_area,
@@ -91,7 +91,7 @@ async function searchWorkers({ service, location, minRating, limit = 20, sortBy 
   if (service && service.trim() && result.rows.length === 0) {
     const fallbackQuery = `
       SELECT 
-        u.id, u.client_id, u.name, u.photo_url,
+        u.id, u.client_id, u.name, u.photo_url, u.profile_image_url,
         COALESCE(u.primary_skill, wa.primary_role) AS primary_skill,
         wa.secondary_roles,
         wa.service_area,

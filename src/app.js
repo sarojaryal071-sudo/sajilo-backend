@@ -46,7 +46,14 @@ const adminRoutes = require('./modules/admin/admin.routes')
 
 const accountingAdminRoutes = require('./modules/accounting/accountingAdmin.routes');
 
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static('uploads', {
+  maxAge: '30d',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg') || filePath.endsWith('.png') || filePath.endsWith('.webp')) {
+      res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+    }
+  }
+}));
 app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/bookings', bookingRoutes)

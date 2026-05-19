@@ -3,6 +3,7 @@ const mediaModel = require('./media.model');
 const { validateEntityType, generateFileName, buildFileUrl, validateFileType } = require('./media.utils');
 const fs = require('fs');
 const path = require('path');
+const sharp = require('sharp');
 
 const UPLOAD_ROOT = path.resolve(process.cwd(), 'uploads');
 
@@ -11,7 +12,7 @@ async function saveProfileImage(file, entityType, userId) {
   if (!['user', 'worker'].includes(entityType)) {
     throw new Error('Profile image only supports user or worker entity types');
   }
-  if (!validateFileType(file.mimetype, 'image')) {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
     throw new Error('Only JPEG, PNG, or WebP images are allowed');
   }
 
@@ -20,7 +21,20 @@ async function saveProfileImage(file, entityType, userId) {
   const destPath = path.join(uploadDir, fileName);
 
   fs.mkdirSync(uploadDir, { recursive: true });
-  fs.renameSync(file.path, destPath);
+
+  // Optimize and save the image
+  try {
+    await sharp(file.path)
+      .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toFile(destPath);
+  } catch (err) {
+    // If optimization fails, fall back to the original file
+    fs.copyFileSync(file.path, destPath);
+  }
+
+  // Remove the temp file
+  try { fs.unlinkSync(file.path); } catch (_) {}
 
   const fileUrl = buildFileUrl(entityType, fileName);
 
@@ -30,8 +44,8 @@ async function saveProfileImage(file, entityType, userId) {
     file_url: fileUrl,
     file_name: file.originalname,
     file_type: 'image',
-    mime_type: file.mimetype,
-    size_bytes: file.size,
+    mime_type: 'image/jpeg',   // we converted to JPEG
+    size_bytes: fs.statSync(destPath).size,
   });
 
   return { url: fileUrl, media_id: record.id };
