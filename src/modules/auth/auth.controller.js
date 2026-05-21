@@ -1,9 +1,17 @@
 const authService = require('./auth.service')
+const events = require('../../events/events')
+const emitter = require('../../events/eventEmitter')
 
 async function register(req, res, next) {
   try {
     const { email, password, role, name } = req.body
     const result = await authService.register({ email, password, role, name })
+
+    // Emit domain event for future consumers (lightweight, non-blocking)
+    if (result.role === 'worker') {
+      emitter.emit(events.WORKER_CREATED, result)
+    }
+
     res.status(201).json({
       success: true,
       data: result,

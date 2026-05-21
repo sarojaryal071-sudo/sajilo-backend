@@ -4,6 +4,13 @@ const controller = require('./uiConfig.controller');
 const authGuard = require('../../middleware/auth.guard');
 const permissionGuard = require('../../middleware/permission.guard');
 
+// Backward‑compatible default route – used by the current frontend runtime
+router.get('/', authGuard, async (req, res) => {
+  // Use the published config for the default "global" scope
+  req.params.scope = 'global';
+  return controller.getPublished(req, res);
+});
+
 // Public: Get published config for any scope
 router.get('/:scope/published', controller.getPublished);
 

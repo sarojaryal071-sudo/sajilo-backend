@@ -74,6 +74,7 @@ app.use('/api/media', require('./modules/media/media.routes'));
 app.use('/api/documents', require('./modules/documents/documents.routes'));
 app.use('/api/files', require('./modules/files/files.routes'));
 
+
 app.use(errorHandler)
 
 app.use('/api/admin/support', require('./modules/admin/support.routes'))
