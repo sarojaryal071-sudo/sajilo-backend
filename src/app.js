@@ -17,6 +17,8 @@ const settingsRoutes = require('./modules/settings/settings.routes');
 
 const app = express()
 
+app.set('trust proxy', 1);
+
 app.use(cors({
   origin: ['http://localhost:5173', 'https://sajilo-app.vercel.app'],
   credentials: true,
@@ -24,7 +26,17 @@ app.use(cors({
 app.use(express.json())
 
 const helmet = require('helmet');
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      connectSrc: ["'self'", "https://sajilo-app.vercel.app", "https://sajilo-backend-c7mi.onrender.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https://res.cloudinary.com"],
+    },
+  },
+}));
 
 async function initDB() {
   await authModel.createUserTable()
