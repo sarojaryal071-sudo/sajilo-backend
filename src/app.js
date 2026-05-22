@@ -26,17 +26,8 @@ app.use(cors({
 app.use(express.json())
 
 const helmet = require('helmet');
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      connectSrc: ["'self'", "https://sajilo-app.vercel.app", "https://sajilo-backend-c7mi.onrender.com"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https://res.cloudinary.com"],
-    },
-  },
-}));
+// Temporarily disabled for debugging – re‑enable after identifying the issue
+// app.use(helmet({ … }));
 
 async function initDB() {
   await authModel.createUserTable()
