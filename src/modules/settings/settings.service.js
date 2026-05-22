@@ -1,8 +1,6 @@
 // sajilo-backend/src/modules/settings/settings.service.js
 const settingsModel = require('./settings.model');
 const authModel = require('../auth/auth.model');
-const { extractSyncValues } = require('./utils/extractSyncValues');
-const { IDENTITY_SYNC_FIELDS } = require('./utils/identitySyncMap');
 const { pool } = require('../../config/database');
 const { diffSettings } = require('./utils/diffSettings');
 const { logSettingsChange } = require('./settings.audit.service');
@@ -90,23 +88,6 @@ async function updateUserSettings(userId, partial, reqInfo = {}) {
     const merged = deepMerge(oldSettings, allowedUpdates);
     const updatedRow = await settingsModel.update(userId, merged, client);
 
-    // Sync identity if needed
-    const syncValues = extractSyncValues(merged);
-    if (Object.keys(syncValues).length > 0) {
-      if (syncValues.email) {
-        const existing = await authModel.findByEmail(syncValues.email);
-        if (existing && existing.id !== userId) throw new Error('Email already in use');
-      }
-      const currentUser = await authModel.findById(userId);
-      const changes = {};
-      for (const [col, val] of Object.entries(syncValues)) {
-        if (currentUser && currentUser[col] !== val) changes[col] = val;
-      }
-      if (Object.keys(changes).length > 0) {
-        await authModel.updateUserIdentity(userId, changes);
-        console.log('[SettingsSync] Synced identity for user', userId, Object.keys(changes).join(','));
-      }
-    }
 
     // Audit: diff and log changed fields
     const diffs = diffSettings(oldSettings, merged);

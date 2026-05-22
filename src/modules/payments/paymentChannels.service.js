@@ -18,17 +18,18 @@ class PaymentChannelsService {
     return result.rows[0];
   }
 
-  async updateChannel(channelId, workerId, { account_holder, account_number, qr_image_url, is_active }) {
+  async updateChannel(channelId, workerId, { provider, account_holder, account_number, qr_image_url, is_active }) {
     const result = await pool.query(
       `UPDATE worker_payment_channels
-       SET account_holder = COALESCE($1, account_holder),
-           account_number = COALESCE($2, account_number),
-           qr_image_url = COALESCE($3, qr_image_url),
-           is_active = COALESCE($4, is_active),
+       SET provider = COALESCE($1, provider),
+           account_holder = COALESCE($2, account_holder),
+           account_number = COALESCE($3, account_number),
+           qr_image_url = COALESCE($4, qr_image_url),
+           is_active = COALESCE($5, is_active),
            updated_at = NOW()
-       WHERE id = $5 AND worker_id = $6
+       WHERE id = $6 AND worker_id = $7
        RETURNING *`,
-      [account_holder, account_number, qr_image_url, is_active, channelId, workerId]
+      [provider, account_holder, account_number, qr_image_url, is_active, channelId, workerId]
     );
     return result.rows[0];
   }
