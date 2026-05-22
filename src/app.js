@@ -23,6 +23,9 @@ app.use(cors({
 }))
 app.use(express.json())
 
+const helmet = require('helmet');
+app.use(helmet());
+
 async function initDB() {
   await authModel.createUserTable()
   console.log('Users table ready')
@@ -58,6 +61,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/app-config', require('./modules/app-config/appConfig.routes'));
 app.use('/api/workers', workerRoutes)
 app.use('/api/workers/view', require('./modules/workers/workers.view.routes'))
+app.use('/api/services/other-services', require('./modules/otherServices/otherServices.routes'));
 app.use('/api/locations', require('./modules/locations/locations.routes'))
 app.use('/api/reviews', require('./modules/reviews/reviews.routes'))
 app.use('/api/notifications', require('./modules/notification/notification.routes'))

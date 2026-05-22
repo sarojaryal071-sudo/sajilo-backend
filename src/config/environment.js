@@ -17,7 +17,13 @@ module.exports = {
     password: process.env.DB_PASSWORD || 'postgres',
   },
   jwt: {
-    secret: process.env.JWT_SECRET || 'default_secret',
+    secret: process.env.JWT_SECRET || (() => {
+    if (process.env.NODE_ENV === 'production') {
+        console.error('FATAL: JWT_SECRET is not set in production environment');
+        process.exit(1);
+    }
+    return 'default_secret';   // only for development
+})(),
     expiresIn: process.env.JWT_EXPIRES_IN || '1h',
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   },
