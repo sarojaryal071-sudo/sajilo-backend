@@ -39,7 +39,18 @@ async function initDB() {
 }
 
 initDB()
-  .then(() => console.log('Database initialized'))
+  .then(async () => {
+    console.log('Database initialized');
+    // Safety check: prevent starting with an empty users table in production
+    if (process.env.NODE_ENV === 'production') {
+      const { pool } = require('./config/database');
+      const { rows } = await pool.query('SELECT COUNT(*) AS count FROM users');
+      if (parseInt(rows[0].count) === 0) {
+        console.error('FATAL: users table is empty in production. Refusing to start to prevent data loss.');
+        process.exit(1);
+      }
+    }
+  })
   .catch((err) => {
     console.error('FATAL: Database connection failed. Server cannot start.')
     console.error(err.message)
@@ -100,6 +111,7 @@ app.use('/api/verification/review', require('./modules/verification/verification
 app.use('/api/ui-config', require('./modules/uiConfig/uiConfig.routes'))
 app.use('/api/performance', require('./modules/performance/performance.routes'))
 app.use('/api/announcements', require('./modules/admin/announcements.routes').publicRouter)
+app.use('/api/admin/brand-assets', require('./modules/admin/brandAssets.routes'));
 
 
 module.exports = app
