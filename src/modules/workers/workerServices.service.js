@@ -10,7 +10,7 @@ const { pool } = require('../../config/database');
 async function resolveProfessions(workerId) {
   // 1. Try the new worker_professions table first
   const wpResult = await pool.query(
-    `SELECT p.id, p.name, p.icon
+    `SELECT p.id, p.name, p.icon, p.icon_image_url
      FROM worker_professions wp
      JOIN professions p ON p.id = wp.profession_id
      WHERE wp.worker_id = $1 AND p.is_active = true`,
@@ -50,7 +50,7 @@ async function resolveProfessions(workerId) {
       `INSERT INTO professions (slug, name)
        VALUES ($1, $2)
        ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
-       RETURNING id, name, icon`,
+       RETURNING id, name, icon, icon_image_url`,
       [slug, name]
     );
     resultRows.push(res.rows[0]);

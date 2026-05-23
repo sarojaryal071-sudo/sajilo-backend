@@ -24,9 +24,11 @@ async function getById(req, res) {
 
 async function create(req, res) {
   try {
-    const { slug, name, name_np, icon, sort_order } = req.body;
+    const { slug, name, name_np, icon, sort_order, icon_image_url, icon_image_public_id } = req.body;
     if (!slug || !name) return res.status(400).json({ error: 'slug and name are required' });
-    const profession = await professionsService.create({ slug, name, name_np, icon, sort_order });
+    const profession = await professionsService.create({
+      slug, name, name_np, icon, sort_order, icon_image_url, icon_image_public_id
+    });
     return res.status(201).json({ success: true, data: profession });
   } catch (err) {
     console.error('create profession error:', err);

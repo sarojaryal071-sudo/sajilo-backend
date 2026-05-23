@@ -21,13 +21,27 @@ async function searchWorkers(req, res, next) {
   }
 }
 
-async function getCategories(req, res) {
+async function getCategories(req, res, next) {
   try {
-    const { getEnabledProfessions } = require('../../config/workerCategories')
-    const categories = getEnabledProfessions()
-    res.json({ success: true, data: categories })
+    const { pool } = require('../../config/database');
+        const result = await pool.query(
+      'SELECT id, slug, name, name_np, icon, icon_image_url, sort_order, is_active, display_section FROM professions WHERE is_active = true ORDER BY sort_order, id'
+    );
+    const categories = result.rows.map(prof => ({
+      id: prof.id,
+      role: prof.slug,
+      label: prof.name,
+      name: prof.name,
+      name_np: prof.name_np,
+      icon: prof.icon,
+      icon_image_url: prof.icon_image_url,
+      enabled: prof.is_active,
+      sort_order: prof.sort_order,
+      display_section: prof.display_section || 'primary',
+    }));
+    res.json({ success: true, data: categories });
   } catch (err) {
-    next(err)
+    next(err);
   }
 }
 

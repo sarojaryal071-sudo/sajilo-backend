@@ -60,16 +60,16 @@ async function deleteFile(mediaId) {
   const media = await mediaModel.findById(mediaId);
   if (!media) throw new Error('Media not found');
 
-  // Delete from Cloudinary using the public_id extracted from the URL
-  const cloudinary = require('../../config/cloudinary');
-  const publicId = getPublicIdFromUrl(media.file_url);
-  if (publicId) {
-    try {
-      await cloudinary.uploader.destroy(publicId);
-    } catch (err) {
-      console.error('Cloudinary delete failed:', err.message);
+      // Delete from storage using the public_id extracted from the URL
+    const storageService = require('../../services/storage.service');
+    const publicId = getPublicIdFromUrl(media.file_url);
+    if (publicId) {
+      try {
+        await storageService.deleteFile(publicId);
+      } catch (err) {
+        console.error('Storage delete failed:', err.message);
+      }
     }
-  }
 
   await mediaModel.remove(mediaId);
   return media;
