@@ -26,4 +26,21 @@ router.put('/admin/:workerId/approve', authGuard, permissionGuard('view_analytic
 // Admin: Reject a worker's verification
 router.put('/admin/:workerId/reject', authGuard, permissionGuard('view_analytics'), controller.rejectVerification);
 
+// Worker: Upload a single verification document
+const upload = require('../../middleware/upload.middleware');
+const storageService = require('../../services/storage.service');
+
+router.post('/upload-document', authGuard, upload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file' });
+    const { document_type } = req.body;
+    if (!document_type) return res.status(400).json({ success: false, error: 'Document type required' });
+
+    const result = await storageService.uploadFile(req.file, 'sajilo/documents/applications');
+    res.json({ success: true, data: { url: result.url, publicId: result.publicId } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

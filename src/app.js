@@ -112,6 +112,6 @@ app.use('/api/ui-config', require('./modules/uiConfig/uiConfig.routes'))
 app.use('/api/performance', require('./modules/performance/performance.routes'))
 app.use('/api/announcements', require('./modules/admin/announcements.routes').publicRouter)
 app.use('/api/admin/brand-assets', require('./modules/admin/brandAssets.routes'));
-
+app.use('/api/admin/documents', require('./modules/admin/documents.routes'));
 
 module.exports = app

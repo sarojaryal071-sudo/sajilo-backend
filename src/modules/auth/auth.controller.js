@@ -51,7 +51,7 @@ async function submitWorkerApplication(req, res) {
     const { pool } = require('../../config/database')
     const userId = req.user.id
     
-    // ---------- DUPLICATE GUARD ----------
+    // Duplicate guard
     const existing = await pool.query(
       `SELECT id FROM worker_applications WHERE user_id = $1`,
       [userId]
@@ -59,16 +59,16 @@ async function submitWorkerApplication(req, res) {
     if (existing.rows.length > 0) {
       return res.status(400).json({ success: false, error: 'Application already submitted' })
     }
-    // ------------------------------------
 
     const {
       fullName, displayName, phone, email, dob,
       primaryRole, secondaryRoles, address, serviceArea,
-      govId, selfieUrl, availability,
+      govIdUrl, selfieUrl, availability,
       notifyEmail, notifySms, notifyApp, notifyLater,
       acceptTerms, backgroundCheck, safetyAgreement
     } = req.body
 
+    // 1. Save application
     const result = await pool.query(
       `INSERT INTO worker_applications 
        (user_id, full_name, display_name, phone, email, dob, primary_role, secondary_roles, 
@@ -78,19 +78,40 @@ async function submitWorkerApplication(req, res) {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
        RETURNING *`,
       [userId, fullName, displayName, phone, email, dob, primaryRole, secondaryRoles,
-       address, serviceArea, govId, selfieUrl, availability,
+       address, serviceArea, govIdUrl || null, selfieUrl || null, availability,
        notifyEmail, notifySms, notifyApp, notifyLater,
        acceptTerms, backgroundCheck, safetyAgreement]
     )
-    
-    // Notify admins about new worker application
+
+    // 2. Create verification record with Cloudinary URLs
+    if (govIdUrl || selfieUrl) {
+      const verificationResult = await pool.query(
+        `INSERT INTO worker_verifications (worker_id, status, submitted_at)
+         VALUES ($1, 'submitted', NOW())
+         ON CONFLICT (worker_id) DO UPDATE SET status = 'submitted', submitted_at = NOW()
+         RETURNING id`,
+        [userId]
+      );
+      const verificationId = verificationResult.rows[0].id;
+
+      const docs = [];
+      if (govIdUrl) docs.push({ verificationId, document_type: 'government_id_front', file_url: govIdUrl });
+      if (selfieUrl) docs.push({ verificationId, document_type: 'selfie_photo', file_url: selfieUrl });
+
+      for (const doc of docs) {
+        await pool.query(
+          `INSERT INTO verification_documents (verification_id, document_type, file_url)
+           VALUES ($1, $2, $3)`,
+          [doc.verificationId, doc.document_type, doc.file_url]
+        );
+      }
+    }
+
+    // 3. Notify admins about new worker application
     try {
       const notificationsService = require('../notification/notification.service');
-      const { pool } = require('../../config/database');
       const userResult = await pool.query('SELECT name FROM users WHERE id = $1', [userId]);
       const applicantName = userResult.rows[0]?.name || 'A worker';
-
-      // Find all active admin user IDs
       const adminResult = await pool.query('SELECT id FROM users WHERE role = $1 AND status = $2', ['admin', 'active']);
       for (const admin of adminResult.rows) {
         await notificationsService.createNotification({
