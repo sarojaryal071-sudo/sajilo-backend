@@ -84,25 +84,52 @@ class UIConfigService {
       throw new Error(`Invalid scope: ${scope}`);
     }
 
-    // Validate
-    const errors = this._validateConfig(scope, config);
+    // 1. Fetch the current draft (or published if no draft exists) to merge with
+    const currentDraft = await pool.query(
+      `SELECT config_json FROM ui_configurations WHERE scope = $1 AND status = 'draft'`,
+      [scope]
+    );
+
+    let existingConfig = {};
+    if (currentDraft.rows.length > 0) {
+      existingConfig = typeof currentDraft.rows[0].config_json === 'string'
+        ? JSON.parse(currentDraft.rows[0].config_json)
+        : currentDraft.rows[0].config_json;
+    } else {
+      // No draft yet – get the published config to preserve existing fields
+      const published = await pool.query(
+        `SELECT config_json FROM ui_configurations WHERE scope = $1 AND status = 'published'`,
+        [scope]
+      );
+      if (published.rows.length > 0) {
+        existingConfig = typeof published.rows[0].config_json === 'string'
+          ? JSON.parse(published.rows[0].config_json)
+          : published.rows[0].config_json;
+      }
+    }
+
+    // 2. Deep-merge: incoming config overrides existing keys, but missing keys stay
+    const mergedConfig = deepMerge(existingConfig, config);
+
+    // 3. Validate merged config
+    const errors = this._validateConfig(scope, mergedConfig);
     if (errors.length > 0) {
       throw new Error(`Validation failed: ${errors.join('; ')}`);
     }
 
-    // Upsert draft
+    // 4. Upsert draft with merged config
     const result = await pool.query(
       `INSERT INTO ui_configurations (scope, config_json, status, version, created_by, updated_at)
        VALUES ($1, $2, 'draft', 1, $3, NOW())
        ON CONFLICT (scope, status)
        DO UPDATE SET config_json = $2, updated_at = NOW()
        RETURNING *`,
-      [scope, JSON.stringify(config), userId]
+      [scope, JSON.stringify(mergedConfig), userId]
     );
 
     return {
       scope,
-      config,
+      config: mergedConfig,
       status: 'draft',
       updatedAt: result.rows[0].updated_at,
     };
@@ -286,6 +313,29 @@ class UIConfigService {
 
     return errors;
   }
+}
+
+/**
+ * Simple deep merge: properties in `override` overwrite `base`, but missing keys in `override` are kept from `base`.
+ * Works for plain objects and nested objects (not arrays).
+ */
+function deepMerge(base, override) {
+  const result = { ...base };
+  for (const key of Object.keys(override)) {
+    if (
+      override[key] &&
+      typeof override[key] === 'object' &&
+      !Array.isArray(override[key]) &&
+      base[key] &&
+      typeof base[key] === 'object' &&
+      !Array.isArray(base[key])
+    ) {
+      result[key] = deepMerge(base[key], override[key]);
+    } else {
+      result[key] = override[key];
+    }
+  }
+  return result;
 }
 
 module.exports = new UIConfigService();
