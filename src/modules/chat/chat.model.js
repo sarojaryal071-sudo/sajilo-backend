@@ -98,6 +98,7 @@ async function getUserConversations(userId) {
       CASE WHEN c.customer_id = $1 THEN u2.profile_image_url ELSE u1.profile_image_url END as other_profile_image_url,
       CASE WHEN c.customer_id = $1 THEN u2.client_id ELSE u1.client_id END as other_client_id,
       (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id AND receiver_id = $1 AND read = false) as unread,
+      st.id AS support_ticket_id,
       st.ticket_token,
       st.category AS ticket_category,
       st.status AS ticket_status,
@@ -137,4 +138,48 @@ function resolveConversationType(senderRole, receiverRole) {
   return 'system'
 }
 
-module.exports = { createChatTables, resolveConversationType, findOrCreateConversation, saveMessage, getMessages, getUserConversations, markRead }
+// Retrieves a merged timeline of messages and attachments for a conversation
+async function getConversationTimeline(conversationId, limit = 100) {
+  const result = await pool.query(
+    `SELECT
+       'message' AS entry_type,
+       m.id AS entry_id,
+       m.created_at,
+       m.id AS message_id,
+       NULL::INTEGER AS attachment_id,
+       m.sender_id,
+       u.name AS sender_name,
+       u.role AS sender_role,
+       m.text,
+       NULL::TEXT AS file_url,
+       NULL::VARCHAR AS attachment_type
+     FROM messages m
+     JOIN users u ON u.id = m.sender_id
+     WHERE m.conversation_id = $1
+
+     UNION ALL
+
+     SELECT
+       'attachment' AS entry_type,
+       a.id AS entry_id,
+       a.created_at,
+       NULL::INTEGER AS message_id,
+       a.id AS attachment_id,
+       a.uploaded_by AS sender_id,
+       u.name AS sender_name,
+       u.role AS sender_role,
+       NULL::TEXT AS text,
+       a.file_url,
+       a.attachment_type
+     FROM support_attachments a
+     JOIN users u ON u.id = a.uploaded_by
+     WHERE a.conversation_id = $1
+
+     ORDER BY created_at ASC
+     LIMIT $2`,
+    [conversationId, limit]
+  );
+  return result.rows;
+}
+
+module.exports = { createChatTables, resolveConversationType, findOrCreateConversation, saveMessage, getMessages, getUserConversations, markRead, getConversationTimeline };

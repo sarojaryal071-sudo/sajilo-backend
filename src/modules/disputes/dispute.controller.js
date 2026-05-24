@@ -2,13 +2,14 @@ const disputeService = require('./dispute.service');
 
 async function escalate(req, res, next) {
   try {
-    const { supportTicketId, workerId, bookingId, category, priority, supportNote } = req.body;
+    const { supportTicketId, workerId, bookingId, category, priority, supportNote, attachmentIds, extraFileUrls } = req.body;
     if (!supportTicketId || !category) return res.status(400).json({ success: false, error: 'supportTicketId and category are required' });
+
     const dispute = await disputeService.escalateToDispute(
       supportTicketId,
       req.user.id,
       req.user.name || 'Admin',
-      { workerId, bookingId, category, priority, supportNote }
+      { workerId, bookingId, category, priority, supportNote, attachmentIds: attachmentIds || [], extraFileUrls: extraFileUrls || [] }
     );
     res.json({ success: true, data: dispute });
   } catch (err) {

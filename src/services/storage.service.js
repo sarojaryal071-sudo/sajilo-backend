@@ -89,10 +89,27 @@ async function listFolder(folder) {
   }));
 }
 
+/**
+ * Copy a file from one Cloudinary folder to another.
+ * Returns the new file's URL and public ID.
+ */
+async function copyFile(sourceUrl, destinationFolder) {
+  const sourcePublicId = extractPublicId(sourceUrl);
+  if (!sourcePublicId) throw new Error('Cannot extract public_id from source URL');
+
+  const result = await cloudinary.uploader.upload(sourceUrl, {
+    folder: destinationFolder,
+    resource_type: 'auto',
+  });
+
+  return { url: result.secure_url, publicId: result.public_id };
+}
+
 module.exports = {
   uploadFile,
   deleteFile,
   getFileUrl,
   generateSignedUrl,
   listFolder,
+  copyFile,
 };

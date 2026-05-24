@@ -65,4 +65,13 @@ async function deleteConversation(req, res, next) {
   }
 }
 
-module.exports = { sendMessage, getConversations, getMessages, deleteConversation };
+async function getTimeline(req, res, next) {
+  try {
+    const timeline = await chatModel.getConversationTimeline(req.params.conversationId);
+    res.json({ success: true, data: timeline });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { sendMessage, getConversations, getMessages, deleteConversation, getTimeline };;
