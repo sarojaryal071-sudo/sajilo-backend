@@ -103,6 +103,8 @@ async function getUserConversations(userId) {
       st.category AS ticket_category,
       st.status AS ticket_status,
       st.priority AS ticket_priority,
+      st.assigned_admin_name,
+      st.assigned_admin_role,
       b.status AS booking_status
      FROM conversations c
      JOIN users u1 ON c.customer_id = u1.id
@@ -152,7 +154,8 @@ async function getConversationTimeline(conversationId, limit = 100) {
        u.role AS sender_role,
        m.text,
        NULL::TEXT AS file_url,
-       NULL::VARCHAR AS attachment_type
+       NULL::VARCHAR AS attachment_type,
+       m.is_system
      FROM messages m
      JOIN users u ON u.id = m.sender_id
      WHERE m.conversation_id = $1
@@ -170,7 +173,8 @@ async function getConversationTimeline(conversationId, limit = 100) {
        u.role AS sender_role,
        NULL::TEXT AS text,
        a.file_url,
-       a.attachment_type
+       a.attachment_type,
+       FALSE AS is_system
      FROM support_attachments a
      JOIN users u ON u.id = a.uploaded_by
      WHERE a.conversation_id = $1

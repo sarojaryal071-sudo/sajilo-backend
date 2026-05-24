@@ -21,8 +21,16 @@ async function canMessage(senderId, receiverId, bookingId) {
     return false;
   }
 
-  // Admin can message anyone — support channel
-  if (sender.role === 'admin' || receiver.role === 'admin') return true
+  // Admin can message anyone — support channel, but block if ticket is closed
+  if (sender.role === 'admin' || receiver.role === 'admin') {
+    // If a support conversation, check ticket status
+    if (bookingId === 0 || bookingId === null) {
+      // We don't have the conversation yet, but we can query later.
+      // For now, we allow. The socket handler will check after conversation fetch.
+      return true
+    }
+    return true
+  }
 
   // Same role cannot message each other
   if (sender.role === receiver.role) return false
@@ -42,15 +50,11 @@ async function sendMessage(senderId, receiverId, text, bookingId = null) {
   const allowed = await canMessage(senderId, receiverId, bookingId)
   if (!allowed) throw new Error('Not allowed to message this user')
 
-  console.log('[SERVICE] sendMessage called with:', { senderId, receiverId, text, bookingId })
-
   const sender = await authModel.findById(senderId)
   const receiver = await authModel.findById(receiverId)
 
-  // Determine customer and worker IDs for conversation grouping
   let customerId, workerId
   if (receiver.role === 'admin' || sender.role === 'admin') {
-    // Group all admin conversations per customer — same customer always reuses same conversation
     customerId = sender.role === 'admin' ? receiverId : senderId
     workerId = sender.role === 'admin' ? senderId : receiverId
     bookingId = 0
@@ -64,9 +68,22 @@ async function sendMessage(senderId, receiverId, text, bookingId = null) {
 
   const conversationType = chatModel.resolveConversationType(sender.role, receiver.role)
   const conversation = await chatModel.findOrCreateConversation(customerId, workerId, bookingId, conversationType)
-  console.log('[SERVICE] conversation returned:', { id: conversation?.id, type: conversation?.conversation_type, customerId, workerId })
-  console.log('[SERVICE] conversation.id used for save:', conversation?.id)
-  return chatModel.saveMessage(conversation.id, senderId, receiverId, text)
+
+  const message = await chatModel.saveMessage(conversation.id, senderId, receiverId, text)
+
+  // ── Auto‑assign admin to support ticket on first admin reply ──
+  if (sender.role === 'admin' && (conversationType === 'customer_admin' || conversationType === 'worker_admin')) {
+    try {
+      const ticket = await require('../support/supportTicket.service').getTicketByConversation(conversation.id);
+      if (ticket) {
+        await require('../support/supportTicket.service').assignAdminIfNeeded(ticket.id, senderId);
+      }
+    } catch (err) {
+      console.error('Auto-assign admin failed:', err.message);
+    }
+  }
+
+  return message
 }
 
 module.exports = { canMessage, sendMessage }

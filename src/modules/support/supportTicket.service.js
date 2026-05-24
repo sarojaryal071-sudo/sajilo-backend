@@ -69,4 +69,46 @@ async function getAllTickets() {
   return result.rows;
 }
 
-module.exports = { createTicket, getTicketByConversation, getTicketById, updateTicketStatus, getAllTickets };
+async function assignAdminIfNeeded(ticketId, adminId) {
+  // Fetch current ticket
+  const ticketRes = await pool.query(`SELECT * FROM support_tickets WHERE id = $1`, [ticketId]);
+  const ticket = ticketRes.rows[0];
+  if (!ticket) return null;
+
+  // Already assigned – do nothing
+  if (ticket.assigned_admin_id) return ticket;
+
+  // Get admin info
+  const adminRes = await pool.query(`SELECT name, role FROM users WHERE id = $1`, [adminId]);
+  const admin = adminRes.rows[0];
+  if (!admin) return null;
+
+  const now = new Date().toISOString();
+
+  // Update ticket
+  const updated = await pool.query(
+    `UPDATE support_tickets 
+     SET assigned_admin_id = $1, assigned_admin_name = $2, assigned_admin_role = $3, assigned_at = $4
+     WHERE id = $5
+     RETURNING *`,
+    [adminId, admin.name, admin.role, now, ticketId]
+  );
+
+  // Insert system join message into conversation
+  const joinText = `${admin.name} joined the conversation\n${admin.role}`;
+  await pool.query(
+    `INSERT INTO messages (conversation_id, sender_id, receiver_id, text, read, created_at, is_system)
+     VALUES ($1, $2, $3, $4, TRUE, NOW(), TRUE)`,
+    [ticket.conversation_id, adminId, adminId, joinText]
+  );
+
+  // Update last_message on conversation
+  await pool.query(
+    `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2`,
+    [joinText, ticket.conversation_id]
+  );
+
+  return updated.rows[0];
+}
+
+module.exports = { createTicket, getTicketByConversation, getTicketById, updateTicketStatus, getAllTickets, assignAdminIfNeeded };

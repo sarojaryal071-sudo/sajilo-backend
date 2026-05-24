@@ -50,6 +50,31 @@ function initializeSocket(server) {
         const receiver = await authModel.findById(receiverId)
         const senderClientId = sender?.client_id || prefixedId
         const receiverRoom = getUserRoom(receiverId, receiver?.client_id)
+
+        // Block sending on resolved/escalated support tickets
+        if (sender.role === 'admin' || receiver.role === 'admin') {
+          const cType = sender.role === 'admin'
+            ? (receiver.role === 'customer' ? 'customer_admin' : 'worker_admin')
+            : (sender.role === 'customer' ? 'customer_admin' : 'worker_admin')
+          const custId = sender.role === 'admin' ? receiverId : id
+          const workId = sender.role === 'admin' ? id : receiverId
+          const { pool } = require('../config/database')
+          const existingConv = await pool.query(
+            `SELECT id FROM conversations WHERE customer_id = $1 AND worker_id = $2 AND conversation_type = $3`,
+            [custId, workId, cType]
+          )
+          if (existingConv.rows.length > 0) {
+            const ticket = await pool.query(
+              `SELECT status FROM support_tickets WHERE conversation_id = $1 LIMIT 1`,
+              [existingConv.rows[0].id]
+            )
+            if (ticket.rows.length > 0 && ['resolved', 'escalated'].includes(ticket.rows[0].status)) {
+              socket.emit('message_error', { error: 'This support case has been resolved.' })
+              return
+            }
+          }
+        }
+
         const message = await chatService.sendMessage(id, receiverId, text, bookingId)
         const msg = {
           ...message,
