@@ -8,11 +8,11 @@ const CATEGORIES = supportCategories.map(c => c.key);
 const STATUSES   = ['open', 'in_progress', 'resolved', 'escalated'];
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
 
-function generateToken() {
+function generateToken(category) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let token = '';
   for (let i = 0; i < 6; i++) token += chars[Math.floor(Math.random() * chars.length)];
-  const prefix = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)].substring(0, 3).toUpperCase();
+  const prefix = (category || 'other').substring(0, 3).toUpperCase();
   return `${prefix}-${token}`;
 }
 
@@ -20,7 +20,7 @@ async function createTicket(conversationId, clientId, category = 'other', priori
   if (!CATEGORIES.includes(category)) throw new Error(`Invalid category: ${category}`);
   if (!PRIORITIES.includes(priority)) throw new Error(`Invalid priority: ${priority}`);
 
-  const token = generateToken();
+  const token = generateToken(category);
 
   const result = await pool.query(
     `INSERT INTO support_tickets (ticket_token, conversation_id, category, status, priority, client_id)

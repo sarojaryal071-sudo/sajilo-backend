@@ -92,10 +92,11 @@ async function getUserConversations(userId) {
 
   const result = await pool.query(
     `SELECT c.*, 
-      CASE WHEN c.customer_id = $1 THEN COALESCE(u2.name, 'Support') ELSE COALESCE(u1.name, 'Support') END as other_name,
+      CASE WHEN c.customer_id = $1 THEN COALESCE(u2.name, u2.client_id) ELSE COALESCE(u1.name, u1.client_id) END as other_name,
       CASE WHEN c.customer_id = $1 THEN c.worker_id ELSE c.customer_id END as other_id,
       CASE WHEN c.customer_id = $1 THEN u2.role ELSE u1.role END as other_role,
       CASE WHEN c.customer_id = $1 THEN u2.profile_image_url ELSE u1.profile_image_url END as other_profile_image_url,
+      CASE WHEN c.customer_id = $1 THEN u2.client_id ELSE u1.client_id END as other_client_id,
       (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id AND receiver_id = $1 AND read = false) as unread,
       st.ticket_token,
       st.category AS ticket_category,
