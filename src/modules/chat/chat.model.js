@@ -62,7 +62,7 @@ async function saveMessage(conversationId, senderId, receiverId, text) {
     [conversationId, senderId, receiverId, text]
   )
   await pool.query(
-    `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2`,
+    `UPDATE conversations SET last_message = $1, last_message_at = NOW(), is_initiated = TRUE WHERE id = $2`,
     [text, conversationId]
   )
   return result.rows[0]
@@ -81,17 +81,36 @@ async function getMessages(conversationId, limit = 50) {
 
 // Gets all conversations for a user with unread count
 async function getUserConversations(userId) {
+  // Determine which soft-delete column to check based on user role
+  const userResult = await pool.query(`SELECT role FROM users WHERE id = $1`, [userId]);
+  const role = userResult.rows[0]?.role || 'customer';
+
+  let deleteColumn;
+  if (role === 'customer') deleteColumn = 'c.customer_deleted';
+  else if (role === 'worker') deleteColumn = 'c.worker_deleted';
+  else deleteColumn = 'c.admin_deleted';
+
   const result = await pool.query(
     `SELECT c.*, 
-      CASE WHEN c.customer_id = $1 THEN u2.name ELSE u1.name END as other_name,
+      CASE WHEN c.customer_id = $1 THEN COALESCE(u2.name, 'Support') ELSE COALESCE(u1.name, 'Support') END as other_name,
       CASE WHEN c.customer_id = $1 THEN c.worker_id ELSE c.customer_id END as other_id,
       CASE WHEN c.customer_id = $1 THEN u2.role ELSE u1.role END as other_role,
       CASE WHEN c.customer_id = $1 THEN u2.profile_image_url ELSE u1.profile_image_url END as other_profile_image_url,
-      (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id AND receiver_id = $1 AND read = false) as unread
+      (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id AND receiver_id = $1 AND read = false) as unread,
+      st.ticket_token,
+      st.category AS ticket_category,
+      st.status AS ticket_status,
+      st.priority AS ticket_priority,
+      b.status AS booking_status
      FROM conversations c
      JOIN users u1 ON c.customer_id = u1.id
      JOIN users u2 ON c.worker_id = u2.id
-     WHERE c.customer_id = $1 OR c.worker_id = $1
+     LEFT JOIN support_tickets st ON st.conversation_id = c.id
+     LEFT JOIN bookings b ON c.booking_id = b.id
+     WHERE (c.customer_id = $1 OR c.worker_id = $1)
+       AND c.is_initiated = TRUE
+       AND ${deleteColumn} = FALSE
+       AND (b.status IS NULL OR b.status != 'cancelled')
      ORDER BY c.last_message_at DESC`,
     [userId]
   )

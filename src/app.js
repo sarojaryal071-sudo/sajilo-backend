@@ -113,5 +113,9 @@ app.use('/api/performance', require('./modules/performance/performance.routes'))
 app.use('/api/announcements', require('./modules/admin/announcements.routes').publicRouter)
 app.use('/api/admin/brand-assets', require('./modules/admin/brandAssets.routes'));
 app.use('/api/admin/documents', require('./modules/admin/documents.routes'));
+app.use('/api/support-tickets', require('./modules/support/supportTicket.routes'));
+app.use('/api/support-flow', require('./modules/support/supportFlow.routes'));
+app.use('/api/disputes', require('./modules/disputes/dispute.routes'));
+
 
 module.exports = app

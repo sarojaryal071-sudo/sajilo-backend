@@ -1,6 +1,7 @@
 ﻿// Chat controller — REST API handlers for sending messages and loading conversation data
 const chatService = require('./chat.service')
 const chatModel = require('./chat.model')
+const { pool } = require('../../config/database');
 
 // Sends a message from the authenticated user to a receiver — emits via socket if available
 async function sendMessage(req, res, next) {
@@ -41,4 +42,27 @@ async function getMessages(req, res, next) {
   }
 }
 
-module.exports = { sendMessage, getConversations, getMessages }
+async function deleteConversation(req, res, next) {
+  try {
+    const conversationId = Number(req.params.id);
+    const userId = req.user.id;
+    const role = req.user.role;
+
+    // Fetch user's role
+    let deleteColumn;
+    if (role === 'customer') deleteColumn = 'customer_deleted';
+    else if (role === 'worker') deleteColumn = 'worker_deleted';
+    else deleteColumn = 'admin_deleted';
+
+    await pool.query(
+      `UPDATE conversations SET ${deleteColumn} = TRUE WHERE id = $1`,
+      [conversationId]
+    );
+
+    res.json({ success: true, message: 'Conversation deleted from your inbox' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { sendMessage, getConversations, getMessages, deleteConversation };

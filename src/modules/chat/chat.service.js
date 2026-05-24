@@ -30,8 +30,8 @@ async function canMessage(senderId, receiverId, bookingId) {
   // Customer and worker require an active booking in the allowed window
   if (!bookingId) return false
 
-  const result = await pool.query(
-    `SELECT * FROM bookings WHERE id = $1 AND status IN ('accepted', 'onway')`,
+    const result = await pool.query(
+    `SELECT * FROM bookings WHERE id = $1 AND status IN ('accepted', 'onway', 'working')`,
     [bookingId]
   )
   return result.rows.length > 0

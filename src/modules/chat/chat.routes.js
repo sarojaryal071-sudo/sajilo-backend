@@ -7,5 +7,6 @@ router.use(authGuard)
 router.post('/send', chatController.sendMessage)
 router.get('/conversations', chatController.getConversations)
 router.get('/conversations/:conversationId/messages', chatController.getMessages)
+router.delete('/conversations/:id', chatController.deleteConversation)
 
-module.exports = router
+module.exports = router;
