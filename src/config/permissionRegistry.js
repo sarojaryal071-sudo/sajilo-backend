@@ -1,46 +1,56 @@
 // sajilo-backend/src/config/permissionRegistry.js
-// Phase 13B – Role & Permission Engine
+// Phase 2 – Database-driven permission registry
 
-const PERMISSIONS = {
-  MANAGE_WORKERS:       'manage_workers',
-  MANAGE_CUSTOMERS:     'manage_customers',
-  MANAGE_BOOKINGS:      'manage_bookings',
-  MANAGE_PAYMENTS:      'manage_payments',
-  MANAGE_SERVICES:      'manage_services',
-  MANAGE_ANNOUNCEMENTS: 'manage_announcements',
-  MANAGE_TICKETS:       'manage_tickets',
-  MANAGE_FEATURE_FLAGS: 'manage_feature_flags',
-  MANAGE_STAFF:         'manage_staff',
-  MANAGE_POLICIES:      'manage_policies',          // create, edit, deactivate staff accounts
-  VIEW_ANALYTICS:       'view_analytics',
-  VIEW_AUDIT_LOGS:      'view_audit_logs',
-};
-
-// Role‑to‑permission mapping (can be extended with DB later)
-const ROLE_PERMISSIONS = {
-  super_admin: Object.values(PERMISSIONS),   // all permissions
-  admin:       Object.values(PERMISSIONS),   // same for now; can be reduced later
-  moderator: [
-    PERMISSIONS.MANAGE_WORKERS,
-    PERMISSIONS.MANAGE_CUSTOMERS,
-    PERMISSIONS.MANAGE_BOOKINGS,
-    PERMISSIONS.MANAGE_TICKETS,
-  ],
-  support_agent: [
-    PERMISSIONS.MANAGE_TICKETS,
-    PERMISSIONS.VIEW_ANALYTICS,
-  ],
-};
+const { pool } = require('./database');
 
 /**
- * Check if a role has a specific permission.
- * @param {string} role - 'super_admin', 'admin', 'moderator', 'support_agent'
- * @param {string} permission - one of PERMISSIONS values
- * @returns {boolean}
+ * Check if a user has a specific permission.
+ * Resolves the user's role via role_id or legacy role, then checks the database.
+ * Falls back to full access for legacy 'admin' users without a role_id.
  */
-function hasPermission(role, permission) {
-  const allowed = ROLE_PERMISSIONS[role] || [];
+async function hasPermission(userId, permission) {
+  // 1. Get user's role
+  const userResult = await pool.query(
+    `SELECT role, role_id FROM users WHERE id = $1`,
+    [userId]
+  );
+  if (userResult.rows.length === 0) return false;
+  const user = userResult.rows[0];
+
+  // 2. Legacy admin fallback (full access)
+  if (user.role === 'admin' && !user.role_id) return true;
+
+  // 3. Super admin bypass
+  if (user.role_id) {
+    const roleResult = await pool.query(
+      `SELECT slug FROM roles WHERE id = $1 AND is_system = TRUE AND slug = 'super-admin'`,
+      [user.role_id]
+    );
+    if (roleResult.rows.length > 0) return true;
+  }
+
+  // 4. Check via role_permissions
+  if (user.role_id) {
+    const permResult = await pool.query(
+      `SELECT 1 FROM role_permissions rp
+       JOIN permissions p ON p.id = rp.permission_id
+       WHERE rp.role_id = $1 AND p.key = $2`,
+      [user.role_id, permission]
+    );
+    if (permResult.rows.length > 0) return true;
+  }
+
+  // 5. Fallback to legacy ROLE_PERMISSIONS map (for backward compatibility)
+  const { ROLE_PERMISSIONS } = require('./permissionRegistry.legacy');
+  const allowed = ROLE_PERMISSIONS[user.role] || [];
   return allowed.includes(permission);
 }
 
-module.exports = { PERMISSIONS, ROLE_PERMISSIONS, hasPermission };
+// Keep the legacy map for fallback
+const ROLE_PERMISSIONS = {
+  admin: ['manage_workers', 'manage_customers', 'manage_bookings', 'manage_payments',
+          'manage_services', 'manage_announcements', 'manage_tickets', 'manage_feature_flags',
+          'manage_staff', 'manage_policies', 'view_analytics', 'view_audit_logs'],
+};
+
+module.exports = { hasPermission, ROLE_PERMISSIONS };

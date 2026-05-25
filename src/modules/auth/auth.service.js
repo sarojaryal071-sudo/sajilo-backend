@@ -41,6 +41,7 @@ async function login({ email, password }) {
       id: user.id,
       email: user.email,
       role: user.role,
+      role_id: user.role_id,
       name: user.name,
       status: user.status,
       client_id: user.client_id,
@@ -53,7 +54,7 @@ async function login({ email, password }) {
 
 function generateToken(user) {
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role, client_id: user.client_id },
+    { id: user.id, email: user.email, role: user.role, client_id: user.client_id, role_id: user.role_id || null },
     config.jwt.secret,
     { expiresIn: config.jwt.expiresIn }
   )

@@ -1,22 +1,12 @@
-// sajilo-backend/src/modules/admin/admin.staff.controller.js
 const staffService = require('./admin.staff.service');
 
-/**
- * POST /api/admin/staff
- * Create a new staff account.
- * Body: { email, password, name, role }
- */
 async function createStaff(req, res) {
   try {
     const adminId = req.user.id;
     const { email, password, name, role } = req.body;
 
-    // Basic validation
     if (!email || !password || !name || !role) {
       return res.status(400).json({ error: 'email, password, name, and role are required' });
-    }
-    if (!['admin', 'moderator', 'support_agent'].includes(role)) {
-      return res.status(400).json({ error: 'role must be admin, moderator, or support_agent' });
     }
     if (password.length < 6) {
       return res.status(400).json({ error: 'password must be at least 6 characters' });
@@ -37,10 +27,6 @@ async function createStaff(req, res) {
   }
 }
 
-/**
- * GET /api/admin/staff
- * List all staff accounts.
- */
 async function listStaff(req, res) {
   try {
     const staff = await staffService.listStaff();
@@ -51,10 +37,6 @@ async function listStaff(req, res) {
   }
 }
 
-/**
- * PUT /api/admin/staff/:id/toggle
- * Toggle a staff account's active status.
- */
 async function toggleStaff(req, res) {
   try {
     const userId = Number(req.params.id);

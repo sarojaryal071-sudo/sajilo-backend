@@ -1,6 +1,7 @@
 const { pool } = require('../../config/database');
 
-const CATEGORIES = ['billing', 'service_quality', 'misconduct', 'other'];
+const supportCategories = require('../support/supportCategories.constants');
+const CATEGORIES = supportCategories.map(c => c.key);
 const STATUSES   = ['open', 'investigating', 'resolved', 'closed'];
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
 const storageService = require('../../services/storage.service');
@@ -75,17 +76,143 @@ async function escalateToDispute(supportTicketId, adminId, adminName, { workerId
 }
 
 async function getDisputeById(disputeId) {
-  const result = await pool.query(
+  // 1. Fetch dispute core data
+  const disputeResult = await pool.query(
     `SELECT d.*, 
             u1.name AS client_name, u1.client_id AS client_code,
-            u2.name AS worker_name, u2.client_id AS worker_code
+            u2.name AS worker_name, u2.client_id AS worker_code,
+            u3.client_id AS handled_by_admin_code
      FROM disputes d
      JOIN users u1 ON u1.id = d.client_id
      LEFT JOIN users u2 ON u2.id = d.worker_id
+     LEFT JOIN users u3 ON u3.id = d.handled_by_admin_id
      WHERE d.id = $1`,
     [disputeId]
   );
-  return result.rows[0] || null;
+  if (disputeResult.rows.length === 0) return null;
+  const dispute = disputeResult.rows[0];
+
+  // 2. Fetch support ticket data
+  const ticketResult = await pool.query(
+    `SELECT id, ticket_token, category, status, priority, client_id
+     FROM support_tickets
+     WHERE id = $1`,
+    [dispute.support_ticket_id]
+  );
+  const ticket = ticketResult.rows[0] || null;
+
+  // 3. Fetch dispute evidences
+  const evidences = await pool.query(
+    `SELECT * FROM dispute_evidences WHERE dispute_id = $1 AND is_active = TRUE ORDER BY created_at ASC`,
+    [disputeId]
+  );
+
+  // 4. Build timeline
+  const timeline = [];
+
+  // 4a. Support messages
+  if (ticket) {
+    const messagesResult = await pool.query(
+      `SELECT m.*, u.name AS sender_name, u.role AS sender_role
+       FROM messages m
+       JOIN users u ON u.id = m.sender_id
+       WHERE m.conversation_id = (
+         SELECT conversation_id FROM support_tickets WHERE id = $1
+       )
+       ORDER BY m.created_at ASC`,
+      [ticket.id]
+    );
+    messagesResult.rows.forEach((msg, idx) => {
+      timeline.push({
+        id: `msg-${msg.id}`,
+        type: 'support_message',
+        source: 'support_chat',
+        created_at: msg.created_at,
+        sequence: timeline.length + 1,
+        author: msg.sender_name,
+        role: msg.sender_role,
+        text: msg.text,
+        url: null,
+        attachment_type: null,
+        event: null,
+        metadata: { messageId: msg.id, senderId: msg.sender_id }
+      });
+    });
+  }
+
+  // 4b. Support attachments
+  if (ticket) {
+    const attachmentsResult = await pool.query(
+      `SELECT sa.*, u.name AS uploaded_by_name, u.role AS uploaded_by_role
+       FROM support_attachments sa
+       JOIN users u ON u.id = sa.uploaded_by
+       WHERE sa.conversation_id = (
+         SELECT conversation_id FROM support_tickets WHERE id = $1
+       )
+       ORDER BY sa.created_at ASC`,
+      [ticket.id]
+    );
+    attachmentsResult.rows.forEach((att) => {
+      timeline.push({
+        id: `att-${att.id}`,
+        type: 'attachment',
+        source: 'support_attachment',
+        created_at: att.created_at,
+        sequence: timeline.length + 1,
+        author: att.uploaded_by_name,
+        role: att.uploaded_by_role,
+        text: null,
+        url: att.file_url,
+        attachment_type: att.attachment_type,
+        event: null,
+        metadata: { attachmentId: att.id, isPromoted: att.is_promoted_to_dispute }
+      });
+    });
+  }
+
+  // 4c. System event: escalated_to_dispute
+  timeline.push({
+    id: `sys-escalated`,
+    type: 'system_event',
+    source: 'system',
+    created_at: dispute.created_at,
+    sequence: timeline.length + 1,
+    author: dispute.handled_by_admin_name,
+    role: 'admin',
+    text: null,
+    url: null,
+    attachment_type: null,
+    event: 'escalated_to_dispute',
+    metadata: { disputeToken: dispute.dispute_token }
+  });
+
+  // 4d. Dispute evidences (admin‑only additions)
+  evidences.rows.forEach((ev) => {
+    timeline.push({
+      id: `ev-${ev.id}`,
+      type: 'evidence',
+      source: 'dispute_evidence',
+      created_at: ev.created_at,
+      sequence: timeline.length + 1,
+      author: 'Admin',           // evidence is uploaded by admin
+      role: 'admin',
+      text: null,
+      url: ev.file_url,
+      attachment_type: ev.evidence_type,
+      event: null,
+      metadata: { evidenceId: ev.id }
+    });
+  });
+
+  // Sort by created_at then sequence
+  timeline.sort((a, b) => new Date(a.created_at) - new Date(b.created_at) || a.sequence - b.sequence);
+
+  return {
+    ...dispute,
+    ticket,
+    evidences: evidences.rows,
+    timeline
+  };
 }
 
 async function getAllDisputes() {

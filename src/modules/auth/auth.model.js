@@ -19,6 +19,8 @@ async function createUserTable() {
   await pool.query(query)
 
   const alterations = [
+    `ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(50)`,
+    `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT false`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) DEFAULT 'pending'`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS skills TEXT[] DEFAULT '{}'`,
