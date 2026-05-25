@@ -26,8 +26,24 @@ function initializeSocket(server) {
     }
   })
 
-  io.on('connection', (socket) => {
-    const { id, role, client_id } = socket.user
+  io.on('connection', async (socket) => {
+    const { id, role, client_id, role_id } = socket.user
+
+    // Block suspended/terminated staff from connecting
+    if (role_id) {
+      const { pool } = require('../config/database');
+      const profileResult = await pool.query(
+        `SELECT status FROM staff_profiles WHERE user_id = $1`,
+        [id]
+      );
+      const profileStatus = profileResult.rows[0]?.status;
+      if (profileStatus === 'suspended' || profileStatus === 'terminated') {
+        socket.emit('error', { message: 'Your account has been suspended or terminated.' });
+        socket.disconnect(true);
+        return;
+      }
+    }
+
     const room = getUserRoom(id, client_id)
     const prefixedId = room.replace('user:', '')   // restore short identifier for logs and legacy
     console.log(`Socket connected: ${room} (${role})`)

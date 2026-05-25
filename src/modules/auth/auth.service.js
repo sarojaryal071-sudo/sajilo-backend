@@ -2,6 +2,8 @@ const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const authModel = require('./auth.model')
 const config = require('../../config/environment')
+const { pool } = require('../../config/database');
+
 
 async function register({ email, password, role, name, legalName, phone }) {
   const existing = await authModel.findByEmail(email)
@@ -36,20 +38,37 @@ async function login({ email, password }) {
       : false
 
   const token = generateToken(user)
-  return {
-    user: {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      role_id: user.role_id,
-      name: user.name,
-      status: user.status,
-      client_id: user.client_id,
-      welcomed: user.welcomed || false,
-      application_submitted
-    },
-    token,
+
+    // Block suspended/terminated staff
+  if (user.role_id) {
+    const profileResult = await pool.query(
+      `SELECT status FROM staff_profiles WHERE user_id = $1`,
+      [user.id]
+    );
+    const profileStatus = profileResult.rows[0]?.status;
+    if (profileStatus === 'suspended') {
+      throw new Error('STAFF_SUSPENDED');
+    }
+    if (profileStatus === 'terminated') {
+      throw new Error('STAFF_TERMINATED');
+    }
   }
+
+      return {
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        role_id: user.role_id,
+        name: user.name,
+        status: user.status,
+        client_id: user.client_id,
+        welcomed: user.welcomed || false,
+        application_submitted,
+        must_change_password: user.must_change_password || false,   // ← add this
+      },
+      token,
+    };
 }
 
 function generateToken(user) {

@@ -2,6 +2,7 @@
 // Creates & manages support tickets attached to conversations
 
 const { pool } = require('../../config/database');
+const { logAuditEvent } = require('../../services/audit.service');
 
 const supportCategories = require('./supportCategories.constants');
 const CATEGORIES = supportCategories.map(c => c.key);
@@ -50,13 +51,34 @@ async function getTicketById(ticketId) {
   return result.rows[0] || null;
 }
 
-async function updateTicketStatus(ticketId, status) {
+async function updateTicketStatus(ticketId, status, adminUser = null) {
   if (!STATUSES.includes(status)) throw new Error(`Invalid status: ${status}`);
+
+  // Capture old state
+  const oldResult = await pool.query(`SELECT status, ticket_token FROM support_tickets WHERE id = $1`, [ticketId]);
+  const oldStatus = oldResult.rows[0]?.status || 'unknown';
+  const ticketToken = oldResult.rows[0]?.ticket_token || 'unknown';
+
   const result = await pool.query(
     `UPDATE support_tickets SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
     [status, ticketId]
   );
-  return result.rows[0] || null;
+  const updatedTicket = result.rows[0];
+
+  // Audit logging for resolve/escalate
+  if (updatedTicket && (status === 'resolved' || status === 'escalated')) {
+    await logAuditEvent({
+      actor: adminUser || { id: null, role: 'system' },
+      action: `ticket.${status}`,
+      entityType: 'support_ticket',
+      entityId: ticketId,
+      entityLabel: ticketToken,
+      oldValues: { status: oldStatus },
+      newValues: { status },
+    });
+  }
+
+  return updatedTicket || null;
 }
 
 async function getAllTickets() {
@@ -108,7 +130,20 @@ async function assignAdminIfNeeded(ticketId, adminId) {
     [joinText, ticket.conversation_id]
   );
 
-  return updated.rows[0];
+  const claimedTicket = updated.rows[0];
+
+  // Audit logging
+  await logAuditEvent({
+    actor: { id: adminId, name: admin.name, role: admin.role, client_id: admin.client_id },
+    action: 'ticket.claimed',
+    entityType: 'support_ticket',
+    entityId: ticketId,
+    entityLabel: claimedTicket.ticket_token,
+    oldValues: { status: 'open', assigned_admin_id: null },
+    newValues: { status: 'in_progress', assigned_admin_id: adminId },
+  });
+
+  return claimedTicket;
 }
 
 async function releaseTicket(ticketId, adminId) {
@@ -142,7 +177,19 @@ async function releaseTicket(ticketId, adminId) {
     [releaseText, ticket.conversation_id]
   );
 
-  return updated.rows[0];
+  const releasedTicket = updated.rows[0];
+
+  await logAuditEvent({
+    actor: { id: adminId },
+    action: 'ticket.released',
+    entityType: 'support_ticket',
+    entityId: ticketId,
+    entityLabel: releasedTicket.ticket_token,
+    oldValues: { status: 'in_progress', assigned_admin_id: adminId },
+    newValues: { status: 'open', assigned_admin_id: null },
+  });
+
+  return releasedTicket;
 }
 
 module.exports = { createTicket, getTicketByConversation, getTicketById, updateTicketStatus, getAllTickets, assignAdminIfNeeded, releaseTicket };
