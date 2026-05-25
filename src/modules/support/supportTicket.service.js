@@ -70,7 +70,6 @@ async function getAllTickets() {
 }
 
 async function assignAdminIfNeeded(ticketId, adminId) {
-  // Fetch current ticket
   const ticketRes = await pool.query(`SELECT * FROM support_tickets WHERE id = $1`, [ticketId]);
   const ticket = ticketRes.rows[0];
   if (!ticket) return null;
@@ -78,20 +77,22 @@ async function assignAdminIfNeeded(ticketId, adminId) {
   // Already assigned – do nothing
   if (ticket.assigned_admin_id) return ticket;
 
-  // Get admin info
+  // Cannot claim resolved or escalated tickets
+  if (ticket.status === 'resolved' || ticket.status === 'escalated') return ticket;
+
   const adminRes = await pool.query(`SELECT name, role FROM users WHERE id = $1`, [adminId]);
   const admin = adminRes.rows[0];
   if (!admin) return null;
 
   const now = new Date().toISOString();
 
-  // Update ticket
+  // Claim: set assigned admin and move status to in_progress
   const updated = await pool.query(
     `UPDATE support_tickets 
-     SET assigned_admin_id = $1, assigned_admin_name = $2, assigned_admin_role = $3, assigned_at = $4
-     WHERE id = $5
+     SET assigned_admin_id = $1, assigned_admin_name = $2, assigned_admin_role = $3, assigned_at = $4, status = 'in_progress', updated_at = $5
+     WHERE id = $6
      RETURNING *`,
-    [adminId, admin.name, admin.role, now, ticketId]
+    [adminId, admin.name, admin.role, now, now, ticketId]
   );
 
   // Insert system join message into conversation
@@ -102,7 +103,6 @@ async function assignAdminIfNeeded(ticketId, adminId) {
     [ticket.conversation_id, adminId, adminId, joinText]
   );
 
-  // Update last_message on conversation
   await pool.query(
     `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2`,
     [joinText, ticket.conversation_id]
@@ -111,4 +111,38 @@ async function assignAdminIfNeeded(ticketId, adminId) {
   return updated.rows[0];
 }
 
-module.exports = { createTicket, getTicketByConversation, getTicketById, updateTicketStatus, getAllTickets, assignAdminIfNeeded };
+async function releaseTicket(ticketId, adminId) {
+  const ticketRes = await pool.query(`SELECT * FROM support_tickets WHERE id = $1`, [ticketId]);
+  const ticket = ticketRes.rows[0];
+  if (!ticket) throw new Error('Ticket not found');
+
+  // Only the assigned admin can release
+  if (ticket.assigned_admin_id !== adminId) throw new Error('Only the assigned admin can release this ticket');
+
+  // Cannot release resolved or escalated tickets
+  if (ticket.status === 'resolved' || ticket.status === 'escalated') throw new Error('Cannot release a resolved or escalated ticket');
+
+  const now = new Date().toISOString();
+
+  const updated = await pool.query(
+    `UPDATE support_tickets SET assigned_admin_id = NULL, released_at = $1, status = 'open', updated_at = $2 WHERE id = $3 RETURNING *`,
+    [now, now, ticketId]
+  );
+
+  // Insert system release message
+  const releaseText = `Ticket released back to support queue`;
+  await pool.query(
+    `INSERT INTO messages (conversation_id, sender_id, receiver_id, text, read, created_at, is_system)
+     VALUES ($1, $2, $3, $4, TRUE, NOW(), TRUE)`,
+    [ticket.conversation_id, adminId, adminId, releaseText]
+  );
+
+  await pool.query(
+    `UPDATE conversations SET last_message = $1, last_message_at = NOW() WHERE id = $2`,
+    [releaseText, ticket.conversation_id]
+  );
+
+  return updated.rows[0];
+}
+
+module.exports = { createTicket, getTicketByConversation, getTicketById, updateTicketStatus, getAllTickets, assignAdminIfNeeded, releaseTicket };
