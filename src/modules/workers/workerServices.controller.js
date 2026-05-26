@@ -1,6 +1,6 @@
-// sajilo-backend/src/modules/workers/workerServices.controller.js
 const workerServicesService = require('./workerServices.service');
 const { getIO } = require('../realtime/socket');
+const { logAuditEvent } = require('../../services/audit.service');
 
 async function getMyServices(req, res) {
   try {
@@ -20,12 +20,24 @@ async function updateService(req, res) {
     const updated = await workerServicesService.updateWorkerService(workerId, Number(req.params.id), { price, is_active });
     if (!updated) return res.status(404).json({ error: 'Worker service not found' });
 
-    // Notify clients so they can refetch this worker's services/prices
-    const io = getIO();
-    if (io) {
-      io.emit('worker.services.updated', { workerId });
-    }
+    try {
+      await logAuditEvent({
+        req,
+        actorId: workerId,
+        action: 'worker.service_updated',
+        entityType: 'worker_service',
+        entityId: Number(req.params.id),
+        entityDisplay: `Worker #${workerId} service ${req.params.id}`,
+        summary: `Worker service updated (price: ${price}, active: ${is_active})`,
+        severity: 'low',
+        category: 'workers',
+        outcome: 'success',
+        newValues: { price, is_active },
+      });
+    } catch (auditErr) { console.error('Audit write failed (service update):', auditErr); }
 
+    const io = getIO();
+    if (io) io.emit('worker.services.updated', { workerId });
     return res.json({ success: true, data: updated });
   } catch (err) {
     console.error('updateService error:', err);
@@ -37,16 +49,28 @@ async function createCustom(req, res) {
   try {
     console.log('🔧 createCustom body:', req.body);
     const workerId = req.user.id;
-        const { profession_id, custom_label, custom_label_np, price } = req.body;
+    const { profession_id, custom_label, custom_label_np, price } = req.body;
     if (!profession_id || !custom_label) return res.status(400).json({ error: 'profession_id and custom_label are required' });
     const service = await workerServicesService.createCustomService(workerId, { profession_id, custom_label, custom_label_np, price });
-    
-    // Notify clients
-    const io = getIO();
-    if (io) {
-      io.emit('worker.services.updated', { workerId });
-    }
 
+    try {
+      await logAuditEvent({
+        req,
+        actorId: workerId,
+        action: 'worker.service_created',
+        entityType: 'worker_service',
+        entityId: service.id,
+        entityDisplay: `Worker #${workerId} custom service ${custom_label}`,
+        summary: `Custom service created: ${custom_label}`,
+        severity: 'low',
+        category: 'workers',
+        outcome: 'success',
+        newValues: { profession_id, custom_label, price },
+      });
+    } catch (auditErr) { console.error('Audit write failed (create custom):', auditErr); }
+
+    const io = getIO();
+    if (io) io.emit('worker.services.updated', { workerId });
     return res.status(201).json({ success: true, data: service });
   } catch (err) {
     console.error('createCustom error:', err);
@@ -54,19 +78,31 @@ async function createCustom(req, res) {
   }
 }
 
-
 async function activateService(req, res) {
   try {
     const workerId = req.user.id;
     const { service_id, profession_id, is_active } = req.body;
     if (!service_id || !profession_id) return res.status(400).json({ error: 'service_id and profession_id are required' });
     const row = await workerServicesService.activateService(workerId, profession_id, service_id, is_active !== false);
-    
-    const io = getIO();
-    if (io) {
-      io.emit('worker.services.updated', { workerId });
-    }
 
+    try {
+      await logAuditEvent({
+        req,
+        actorId: workerId,
+        action: 'worker.service_activated',
+        entityType: 'worker_service',
+        entityId: service_id,
+        entityDisplay: `Worker #${workerId} service ${service_id}`,
+        summary: `Worker service ${is_active ? 'activated' : 'deactivated'}`,
+        severity: 'low',
+        category: 'workers',
+        outcome: 'success',
+        newValues: { is_active },
+      });
+    } catch (auditErr) { console.error('Audit write failed (activate):', auditErr); }
+
+    const io = getIO();
+    if (io) io.emit('worker.services.updated', { workerId });
     return res.json({ success: true, data: row });
   } catch (err) {
     console.error('activateService error:', err);
@@ -78,12 +114,25 @@ async function deleteService(req, res) {
   try {
     const workerId = req.user.id;
     await workerServicesService.deleteWorkerService(workerId, Number(req.params.id));
-    
-    const io = getIO();
-    if (io) {
-      io.emit('worker.services.updated', { workerId });
-    }
 
+    try {
+      await logAuditEvent({
+        req,
+        actorId: workerId,
+        action: 'worker.service_deleted',
+        entityType: 'worker_service',
+        entityId: Number(req.params.id),
+        entityDisplay: `Worker #${workerId} service ${req.params.id}`,
+        summary: `Worker service deleted`,
+        severity: 'low',
+        category: 'workers',
+        outcome: 'success',
+        oldValues: { service_id: req.params.id },
+      });
+    } catch (auditErr) { console.error('Audit write failed (delete):', auditErr); }
+
+    const io = getIO();
+    if (io) io.emit('worker.services.updated', { workerId });
     return res.json({ success: true });
   } catch (err) {
     console.error('deleteService error:', err);
@@ -118,17 +167,27 @@ async function saveJobSizeRanges(req, res) {
     const workerId = req.user.id;
     const { profession_id, small_max_price, medium_max_price } = req.body;
     const ranges = await workerServicesService.saveJobSizeRanges(workerId, {
-      profession_id,
-      small_max_price,
-      medium_max_price
+      profession_id, small_max_price, medium_max_price
     });
 
-    // Emit unified refresh event for client detail pages
-    const io = getIO();
-    if (io) {
-      io.emit('worker.services.updated', { workerId });
-    }
+    try {
+      await logAuditEvent({
+        req,
+        actorId: workerId,
+        action: 'worker.job_size_ranges_updated',
+        entityType: 'worker',
+        entityId: workerId,
+        entityDisplay: `Worker #${workerId}`,
+        summary: `Job size ranges updated for profession ${profession_id}`,
+        severity: 'low',
+        category: 'workers',
+        outcome: 'success',
+        newValues: { small_max_price, medium_max_price },
+      });
+    } catch (auditErr) { console.error('Audit write failed (job sizes):', auditErr); }
 
+    const io = getIO();
+    if (io) io.emit('worker.services.updated', { workerId });
     return res.json({ success: true, data: ranges });
   } catch (err) {
     console.error('saveJobSizeRanges error:', err);

@@ -25,11 +25,54 @@ async function login(req, res, next) {
   try {
     const { email, password } = req.body
     const result = await authService.login({ email, password })
+
+    // Audit login success (safe, never throws)
+    try {
+      const { logAuditEvent } = require('../../services/audit.service');
+      await logAuditEvent({
+        req,
+        actorId: result.user.id,
+        action: 'auth.login.success',
+        entityType: 'auth',
+        entityId: result.user.id,
+        entityDisplay: result.user.client_id || result.user.email,
+        summary: `User ${result.user.client_id || result.user.email} logged in`,
+        severity: 'low',
+        category: 'security',
+        outcome: 'success',
+        newValues: { email, role: result.user.role },
+        contextSnapshot: { must_change_password: result.user.must_change_password || false },
+      });
+    } catch (auditErr) {
+      console.error('AUDIT FAILED (login success):', auditErr);
+    }
+
     res.json({
       success: true,
       data: result,
     })
   } catch (err) {
+    // Audit login failure (safe, never throws)
+    try {
+      const { logAuditEvent } = require('../../services/audit.service');
+      const email = req.body.email || 'unknown';
+      await logAuditEvent({
+        req,
+        action: 'auth.login.failed',
+        entityType: 'auth',
+        entityId: null,
+        entityDisplay: email,
+        summary: `Login failed for ${email}`,
+        severity: 'medium',
+        category: 'security',
+        outcome: 'failure',
+        reason: err.message,
+        newValues: { email },
+      });
+    } catch (auditErr) {
+      console.error('AUDIT FAILED (login failure):', auditErr);
+    }
+
     next(err)
   }
 }

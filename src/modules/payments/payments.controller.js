@@ -295,18 +295,16 @@ async function initiateCashPayment(req, res) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    // Only allow when awaiting cash confirmation
     if (payment.status !== 'awaiting_cash_confirmation' && payment.status !== 'pending_cash') {
       return res.status(400).json({ error: 'Cash payment cannot be initiated in current status' });
     }
 
-    // Record intent timestamp – do NOT change status
     await pool.query(
       `UPDATE payments SET client_cash_intent_at = NOW() WHERE id = $1`,
       [payment.id]
     );
 
-        // ── Payment Timeline: client_cash_intent ──
+    // ── Payment Timeline: client_cash_intent ──
     try {
       const { createPaymentEvent } = require('./paymentTimeline.service');
       await createPaymentEvent({
@@ -320,7 +318,28 @@ async function initiateCashPayment(req, res) {
       console.error('[paymentTimeline] client_cash_intent hook failed:', err.message);
     }
 
-        // Emit socket so worker UI updates
+    // ── Audit: cash payment intent ──
+    try {
+      const { logAuditEvent } = require('../../services/audit.service');
+      await logAuditEvent({
+        req,
+        actorId: customerId,
+        action: 'payment.cash_intent',
+        entityType: 'payment',
+        entityId: payment.id,
+        entityDisplay: `Booking #${bookingId}`,
+        summary: `Cash payment intent recorded for booking #${bookingId}`,
+        severity: 'low',
+        category: 'payments',
+        outcome: 'success',
+        newValues: { status: payment.status, method: payment.method },
+        contextSnapshot: { booking_id: Number(bookingId) },
+      });
+    } catch (auditErr) {
+      console.error('Audit write failed (cash intent):', auditErr);
+    }
+
+    // Emit socket so worker UI updates
     await emitPaymentUpdated(payment);
 
     // Notify worker that client intends to pay cash

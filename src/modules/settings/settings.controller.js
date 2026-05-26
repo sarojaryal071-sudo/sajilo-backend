@@ -13,11 +13,27 @@ async function getSettings(req, res) {
 async function updateSettings(req, res) {
   try {
     const updates = req.body;
-    const reqInfo = {
-      ip: req.ip,
-      userAgent: req.headers['user-agent'] || '',
-    };
+    const reqInfo = { ip: req.ip, userAgent: req.headers['user-agent'] || '' };
     const settings = await settingsService.updateUserSettings(req.user.id, updates, reqInfo);
+
+    // Bridge to main audit log
+    try {
+      const { logAuditEvent } = require('../../services/audit.service');
+      await logAuditEvent({
+        req,
+        actorId: req.user.id,
+        action: 'settings.updated',
+        entityType: 'settings',
+        entityId: req.user.id,
+        entityDisplay: `User #${req.user.id} settings`,
+        summary: `Settings updated (${Object.keys(updates).join(', ')})`,
+        severity: 'low',
+        category: 'settings',
+        outcome: 'success',
+        newValues: { sections: Object.keys(updates) },
+      });
+    } catch (auditErr) { console.error('Audit write failed (settings bridge):', auditErr); }
+
     res.json({ success: true, data: settings });
   } catch (err) {
     console.error('updateSettings error:', err);

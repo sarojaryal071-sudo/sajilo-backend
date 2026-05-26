@@ -68,13 +68,18 @@ async function updateTicketStatus(ticketId, status, adminUser = null) {
   // Audit logging for resolve/escalate
   if (updatedTicket && (status === 'resolved' || status === 'escalated')) {
     await logAuditEvent({
-      actor: adminUser || { id: null, role: 'system' },
+      actorId: adminUser?.id || null,
       action: `ticket.${status}`,
       entityType: 'support_ticket',
       entityId: ticketId,
-      entityLabel: ticketToken,
+      entityDisplay: ticketToken,
+      summary: status === 'escalated' ? 'Support ticket escalated to dispute' : 'Support ticket resolved',
+      severity: status === 'escalated' ? 'high' : 'medium',
+      category: 'support',
+      outcome: 'success',
       oldValues: { status: oldStatus },
       newValues: { status },
+      contextSnapshot: { ticket_token: ticketToken },
     });
   }
 
@@ -134,13 +139,18 @@ async function assignAdminIfNeeded(ticketId, adminId) {
 
   // Audit logging
   await logAuditEvent({
-    actor: { id: adminId, name: admin.name, role: admin.role, client_id: admin.client_id },
+    actorId: adminId,
     action: 'ticket.claimed',
     entityType: 'support_ticket',
     entityId: ticketId,
-    entityLabel: claimedTicket.ticket_token,
+    entityDisplay: claimedTicket.ticket_token,
+    summary: `Support ticket claimed by ${admin.name}`,
+    severity: 'low',
+    category: 'support',
+    outcome: 'success',
     oldValues: { status: 'open', assigned_admin_id: null },
     newValues: { status: 'in_progress', assigned_admin_id: adminId },
+    contextSnapshot: { ticket_token: claimedTicket.ticket_token },
   });
 
   return claimedTicket;
@@ -180,13 +190,18 @@ async function releaseTicket(ticketId, adminId) {
   const releasedTicket = updated.rows[0];
 
   await logAuditEvent({
-    actor: { id: adminId },
+    actorId: adminId,
     action: 'ticket.released',
     entityType: 'support_ticket',
     entityId: ticketId,
-    entityLabel: releasedTicket.ticket_token,
+    entityDisplay: releasedTicket.ticket_token,
+    summary: 'Support ticket released back to queue',
+    severity: 'medium',
+    category: 'support',
+    outcome: 'success',
     oldValues: { status: 'in_progress', assigned_admin_id: adminId },
     newValues: { status: 'open', assigned_admin_id: null },
+    contextSnapshot: { ticket_token: releasedTicket.ticket_token },
   });
 
   return releasedTicket;

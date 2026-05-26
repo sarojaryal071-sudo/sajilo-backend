@@ -13,12 +13,29 @@ async function getMe(req, res, next) {
 
 async function updateMe(req, res, next) {
   try {
-    const user = await usersService.updateProfile(req.user.id, req.body)
-    res.json({ success: true, data: user })
+    const user = await usersService.updateProfile(req.user.id, req.body);
+    try {
+      const { logAuditEvent } = require('../../services/audit.service');
+      await logAuditEvent({
+        req,
+        actorId: req.user.id,
+        action: 'user.profile_updated',
+        entityType: 'user',
+        entityId: req.user.id,
+        entityDisplay: user.client_id || user.email,
+        summary: `User profile updated for ${user.client_id || user.email}`,
+        severity: 'low',
+        category: 'workers',
+        outcome: 'success',
+        newValues: req.body,
+      });
+    } catch (auditErr) { console.error('Audit write failed (profile update):', auditErr); }
+    res.json({ success: true, data: user });
   } catch (err) {
-    next(err)
+    next(err);
   }
 }
+
 
 async function getWorkerMe(req, res, next) {
   try {
@@ -29,9 +46,25 @@ async function getWorkerMe(req, res, next) {
 
 async function updateWorkerMe(req, res, next) {
   try {
-    const profile = await usersService.updateWorkerProfile(req.user.id, req.body)
-    res.json({ success: true, data: profile })
-  } catch (err) { next(err) }
+    const profile = await usersService.updateWorkerProfile(req.user.id, req.body);
+    try {
+      const { logAuditEvent } = require('../../services/audit.service');
+      await logAuditEvent({
+        req,
+        actorId: req.user.id,
+        action: 'worker.profile_updated',
+        entityType: 'worker',
+        entityId: req.user.id,
+        entityDisplay: profile.client_id || `worker ${req.user.id}`,
+        summary: `Worker profile updated for ${profile.client_id || req.user.id}`,
+        severity: 'low',
+        category: 'workers',
+        outcome: 'success',
+        newValues: req.body,
+      });
+    } catch (auditErr) { console.error('Audit write failed (worker profile):', auditErr); }
+    res.json({ success: true, data: profile });
+  } catch (err) { next(err); }
 }
 
 async function getWorkerEarnings(req, res, next) {

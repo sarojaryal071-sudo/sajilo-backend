@@ -26,11 +26,24 @@ async function createStaff(req, res) {
     });
 
     await logAuditEvent({
-      actor: req.user,
+      actorId: req.user.id,
       action: 'staff.create',
       entityType: 'staff',
       entityId: staff.id,
-      entityLabel: staff.email,
+      entityDisplay: staff.client_id,
+      summary: `Staff account created: ${staff.client_id}`,
+      severity: 'low',
+      category: 'staff',
+      outcome: 'success',
+      targetClientId: staff.client_id,
+      targetName: req.body.fullName || req.body.name,
+      targetRoleName: req.body.role,
+      targetDepartment: req.body.department || null,
+      metadata: {
+        department: req.body.department || null,
+        designation: req.body.designation || null,
+        employmentType: req.body.employmentType || 'full_time',
+      },
       newValues: { email: staff.email, role: req.body.role, client_id: staff.client_id },
       req,
     });
@@ -111,11 +124,15 @@ async function changeStaffRole(req, res) {
     // For immediate effect, we could emit a socket event, but for simplicity, the next request will pick up the new role.
 
     await logAuditEvent({
-      actor: req.user,
+      actorId: req.user.id,
       action: 'staff.role_change',
       entityType: 'staff',
       entityId: userId,
-      entityLabel: `user ${userId}`,
+      entityDisplay: req.body.clientId || `user ${userId}`,
+      summary: `Staff role changed to ${role}`,
+      severity: 'medium',
+      category: 'staff',
+      outcome: 'success',
       oldValues: { role: req.body.oldRole || 'unknown' },
       newValues: { role },
       req,
@@ -142,12 +159,17 @@ async function changeStaffStatus(req, res) {
     const userStatus = (status === 'active' || status === 'on_leave') ? 'active' : 'inactive';
     await pool.query(`UPDATE users SET status = $1 WHERE id = $2`, [userStatus, userId]);
 
-    await logAuditEvent({
-      actor: req.user,
+       await logAuditEvent({
+      actorId: req.user.id,
       action: `staff.${status}`,
       entityType: 'staff',
       entityId: userId,
-      entityLabel: `user ${userId}`,
+      entityDisplay: req.body.clientId || `user ${userId}`,
+      summary: status === 'suspended' ? 'Staff suspended' : status === 'terminated' ? 'Staff terminated' : `Staff status changed to ${status}`,
+      severity: status === 'terminated' ? 'high' : 'medium',
+      category: 'staff',
+      outcome: 'success',
+      metadata: status === 'suspended' || status === 'terminated' ? { ticketsReleased: true } : null,
       newValues: { status },
       req,
     });
@@ -172,12 +194,21 @@ async function resetStaffPassword(req, res) {
       [passwordHash, userId]
     );
 
-    await logAuditEvent({
-      actor: req.user,
+        await logAuditEvent({
+      actorId: req.user.id,
       action: 'staff.password_reset',
       entityType: 'staff',
       entityId: userId,
-      entityLabel: `user ${userId}`,
+      entityDisplay: req.body.clientId || `user ${userId}`,
+      summary: 'Password reset initiated',
+      severity: 'medium',
+      category: 'staff',
+      outcome: 'success',
+      metadata: {
+        temporaryPasswordIssued: true,
+        mustChangePasswordEnabled: true,
+      },
+      reason: req.body.reason || null,
       req,
     });
 

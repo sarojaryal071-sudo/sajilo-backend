@@ -25,6 +25,34 @@ app.use(cors({
 }))
 app.use(express.json())
 
+// ── Correlation ID middleware ─────────────────────────────────
+const { runWithCorrelationId } = require('./services/audit.service');
+const { randomUUID } = require('crypto');
+app.use((req, res, next) => {
+  const correlationId = req.headers['x-correlation-id'] || randomUUID();
+  res.set('X-Correlation-Id', correlationId);
+  runWithCorrelationId(correlationId, () => next());
+});
+
+// ── Dev‑mode: warn if no audit event emitted on mutation endpoints ──
+if (process.env.NODE_ENV !== 'production') {
+  const { wasAuditEmitted } = require('./services/audit.service');
+  app.use((req, res, next) => {
+    const originalEnd = res.end;
+    res.end = function(...args) {
+      if (['POST','PUT','PATCH','DELETE'].includes(req.method) &&
+          !res.headersSent && res.statusCode < 400 &&
+          !wasAuditEmitted()) {
+        console.warn(
+          `[AUDIT-WARN] No audit event emitted for ${req.method} ${req.originalUrl} (status ${res.statusCode})`
+        );
+      }
+      originalEnd.apply(this, args);
+    };
+    next();
+  });
+}
+
 const helmet = require('helmet');
 // Temporarily disabled for debugging – re‑enable after identifying the issue
 // app.use(helmet({ … }));
@@ -99,6 +127,7 @@ app.use('/api/admin/support', require('./modules/admin/support.routes'))
 app.use('/api/admin/support/tickets', require('./modules/support/supportTickets.routes').adminRouter)
 app.use('/api/admin/announcements', require('./modules/admin/announcements.routes').adminRouter)
 app.use('/api/admin/activity', require('./modules/activity/activity.routes'))
+app.use('/api/admin/audit', require('./modules/admin/admin.audit.routes'));
 app.use('/api/admin/search', require('./modules/admin/admin.search.routes'))
 app.use('/api/admin/staff', require('./modules/admin/admin.staff.routes'))
 app.use('/api/admin/policies', require('./modules/admin/policy.routes'))

@@ -18,9 +18,23 @@ const { pool } = require('../../config/database');
  * Execute the daily integrity check.
  * Called by the scheduler service.
  */
-async function run() {
+async function _run() {
   const startTime = new Date();
   console.log(`[IntegrityJob] Starting daily integrity check at ${startTime.toISOString()}`);
+
+  // ── Audit job started ──
+  try {
+    const { logAuditEvent } = require('../../services/audit.service');
+    await logAuditEvent({
+      req: null,
+      action: 'cron.integrity_check.started',
+      entityType: 'system',
+      summary: 'Daily integrity check started',
+      severity: 'low',
+      category: 'system',
+      outcome: 'success',
+    });
+  } catch (auditErr) { console.error('[IntegrityJob] Audit started failed:', auditErr); }
 
   try {
     // Run system-wide reconciliation
@@ -44,6 +58,27 @@ async function run() {
       await _notifyAdmins(report);
     }
 
+    // Audit main audit log
+    try {
+      const { logAuditEvent } = require('../../services/audit.service');
+      await logAuditEvent({
+        req: null,
+        action: 'cron.integrity_check',
+        entityType: 'system',
+        summary: `Daily integrity check: ${report.totalIssuesFound} issues (${report.bySeverity.high} high)`,
+        severity: report.bySeverity.high > 0 ? 'high' : 'low',
+        category: 'system',
+        outcome: 'success',
+        metadata: {
+          totalWorkers: report.totalWorkers,
+          totalIssues: report.totalIssuesFound,
+          high: report.bySeverity.high,
+          medium: report.bySeverity.medium,
+          low: report.bySeverity.low,
+        },
+      });
+    } catch (auditErr) { console.error('Audit write failed (integrity check):', auditErr); }
+
     return {
       success: true,
       report,
@@ -51,6 +86,20 @@ async function run() {
     };
   } catch (error) {
     console.error('[IntegrityJob] Failed:', error.message);
+    // Audit failure
+    try {
+      const { logAuditEvent } = require('../../services/audit.service');
+      await logAuditEvent({
+        req: null,
+        action: 'cron.integrity_check.failed',
+        entityType: 'system',
+        summary: `Daily integrity check failed`,
+        severity: 'high',
+        category: 'system',
+        outcome: 'failure',
+        reason: error.message,
+      });
+    } catch (auditErr) { console.error('Audit write failed (integrity failure):', auditErr); }
     return {
       success: false,
       error: error.message,
@@ -153,4 +202,14 @@ async function _notifyAdmins(report) {
   }
 }
 
-module.exports = { run };
+const { runWithCorrelationId } = require('../../services/audit.service');
+const { randomUUID } = require('crypto');
+
+module.exports = {
+  run: function() {
+    const correlationId = randomUUID();
+    return runWithCorrelationId(correlationId, async () => {
+      return _run();
+    });
+  }
+};

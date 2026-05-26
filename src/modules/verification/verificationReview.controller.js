@@ -1,4 +1,5 @@
 const reviewService = require('./verificationReview.service');
+const { logAuditEvent } = require('../../services/audit.service');
 
 async function createReview(req, res, next) {
   try {
@@ -12,6 +13,24 @@ async function createReview(req, res, next) {
       reasonCode: reasonCode || null, reasonText: reasonText || null,
       reviewedBy: req.user.id,
     });
+
+    try {
+      await logAuditEvent({
+        req,
+        actorId: req.user.id,
+        action: 'verification.document_reviewed',
+        entityType: 'verification_document',
+        entityId: documentId || 0,
+        entityDisplay: `Worker #${workerId} document`,
+        summary: `Document reviewed: ${status}${reasonCode ? ' (' + reasonCode + ')' : ''}`,
+        severity: 'low',
+        category: 'verification',
+        outcome: 'success',
+        newValues: { status, reasonCode, reasonText },
+        contextSnapshot: { workerId, verificationId },
+      });
+    } catch (auditErr) { console.error('Audit write failed (document review):', auditErr); }
+
     res.json({ success: true, data: review });
   } catch (err) {
     next(err);

@@ -44,6 +44,17 @@ function initializeSocket(server) {
       }
     }
 
+    // ── Wrap all event listeners with correlation ID per event ──
+    const { runWithCorrelationId } = require('../../services/audit.service');
+    const { randomUUID } = require('crypto');
+    const originalOn = socket.on.bind(socket);
+    socket.on = (event, listener) => {
+      originalOn(event, function(...args) {
+        const correlationId = randomUUID();
+        runWithCorrelationId(correlationId, () => listener.apply(this, args));
+      });
+    };
+
     const room = getUserRoom(id, client_id)
     const prefixedId = room.replace('user:', '')   // restore short identifier for logs and legacy
     console.log(`Socket connected: ${room} (${role})`)
@@ -57,6 +68,7 @@ function initializeSocket(server) {
     socket.emit('connected', { userId: prefixedId, role })
     if (role === 'admin') { socket.join('room:admin_all') }
     if (role === 'worker') { socket.join('worker:active') }
+
 
     socket.on('send_message', async (data) => {
       console.log('[SEND_MSG]', prefixedId, '→', data.receiverId)
